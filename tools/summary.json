@@ -1,0 +1,37 @@
+{
+  "analysis-summary": {
+    "status": "complete",
+    "metadata": {
+      "siteUrl": "https://www.edc.ca/",
+      "siteName": "www.edc.ca",
+      "analysisDate": "2026-04-21"
+    },
+    "metrics": {
+      "urlDiscoveryMethod": "https://www.edc.ca/sitemap.xml",
+      "totalPages": 6448,
+      "localeCount": 2,
+      "locales": [
+        {
+          "locale": "en",
+          "pages": 3277
+        },
+        {
+          "locale": "fr",
+          "pages": 3171
+        }
+      ],
+      "totalTemplates": 130,
+      "totalBlockTypes": 29,
+      "unknownBlockVariants": 5,
+      "edsBlockVariants": 24,
+      "pagesAnalyzed": 2984,
+      "percentAnalyzed": 46,
+      "pagesPending": 6,
+      "pagesFailed": 10,
+      "blockDetectionCrashes": 0
+    },
+    "errors": {
+      "totalCount": 659
+    }
+  }
+}
