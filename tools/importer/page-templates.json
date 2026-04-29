@@ -1,0 +1,72 @@
+{
+  "templates": [
+    {
+      "name": "annual-report-performance",
+      "description": "EDC Annual Report campaign page with hero banner, KPI stats cards, alternating image+text columns sections, callout highlights, and infographic content.",
+      "urls": [
+        "https://www.edc.ca/en/about-us/corporate/corporate-reports/2022-annual-report/performance.html"
+      ],
+      "blocks": [
+        {
+          "name": "hero",
+          "instances": [
+            "section.c-hero-banner"
+          ]
+        },
+        {
+          "name": "cards",
+          "instances": [
+            ".imageinbodytext .image-body-text.default"
+          ]
+        },
+        {
+          "name": "columns",
+          "instances": [
+            ".imageinbodytext .image-body-text"
+          ]
+        }
+      ],
+      "sections": [
+        {
+          "id": "section-hero",
+          "name": "Hero",
+          "selector": "section.c-hero-banner",
+          "blocks": ["hero"]
+        },
+        {
+          "id": "section-sticky-nav",
+          "name": "Download Bar",
+          "selector": "section.c-sticky-nav-wrapper",
+          "blocks": [],
+          "defaultContent": ["span.hidden-xs", "a.button"]
+        },
+        {
+          "id": "section-kpi-stats",
+          "name": "KPI Stats",
+          "selector": ".imageinbodytext[class*='default--4']",
+          "blocks": ["cards"]
+        },
+        {
+          "id": "section-content-blocks",
+          "name": "Content Blocks",
+          "selector": ".imageinbodytext[class*='default--6']",
+          "blocks": ["columns"]
+        },
+        {
+          "id": "section-overview",
+          "name": "Overview Callout",
+          "selector": "section.travel-brief",
+          "blocks": [],
+          "defaultContent": ["h2.title", "p"]
+        },
+        {
+          "id": "section-climate",
+          "name": "Climate Targets",
+          "selector": ".image-body-text.medium",
+          "blocks": [],
+          "defaultContent": ["h2", "p", "picture", ".image-caption"]
+        }
+      ]
+    }
+  ]
+}

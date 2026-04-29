@@ -1,5 +1,5 @@
 {
-    "libraryUrl": "https://main--ise-boilerplate--aemdemos.aem.page/docs/library/blocks.json",
-    "type": "da",
-    "contentHostUrl": "content.da.live"
-  }
+  "type": "da",
+  "libraryUrl": "https://main--sta-xwalk-boilerplate--aemysites.aem.page/tools/sidekick/library.json",
+  "contentHostUrl": "https://content.da.live/aemdemos/poc-edc/"
+}
