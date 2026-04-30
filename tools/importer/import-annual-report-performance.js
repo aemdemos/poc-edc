@@ -548,8 +548,8 @@ function extractInfographic(document, main) {
   const hasViewportVariants = allSrcs.length > 1;
 
   if (hasViewportVariants) {
-    // Multiple viewport images — wrap in a Columns block so columns.js handles the swap
-    // Add an <hr> before so the block starts in its own section
+    // Multiple viewport images — single-column Columns block (just images)
+    // Caption goes as default content after the block
     const imageCell = document.createElement('div');
     allSrcs.forEach(({ src }) => {
       const newImg = document.createElement('img');
@@ -558,15 +558,16 @@ function extractInfographic(document, main) {
       imageCell.appendChild(newImg);
     });
 
-    const captionCell = document.createElement('div');
+    const rows = [[imageCell]];
+    const table = createBlock(document, 'Columns', rows);
+
+    // Caption as default content (italic paragraph) after the block
+    const captionEl = document.createElement('p');
     if (caption) {
       const em = document.createElement('em');
       em.textContent = caption.textContent.trim();
-      captionCell.appendChild(em);
+      captionEl.appendChild(em);
     }
-
-    const rows = caption ? [[imageCell, captionCell]] : [[imageCell]];
-    const table = createBlock(document, 'Columns', rows);
 
     // Insert section break before the block so it's in its own section
     const hr = document.createElement('hr');
@@ -575,9 +576,10 @@ function extractInfographic(document, main) {
     const parent = infographic.closest('.imageinbodytext') || infographic;
     parent.remove();
 
-    // Insert hr + Columns table directly into main (body level) so it becomes its own section
+    // Insert hr + Columns table + caption directly into main (body level)
     main.appendChild(hr);
     main.appendChild(table);
+    if (caption) main.appendChild(captionEl);
   } else {
     // Single image — keep as default content
     const div = document.createElement('div');

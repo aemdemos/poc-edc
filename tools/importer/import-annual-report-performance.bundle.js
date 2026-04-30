@@ -474,19 +474,20 @@ var CustomImportScript = (() => {
         newImg.alt = alt;
         imageCell.appendChild(newImg);
       });
-      const captionCell = document.createElement("div");
+      const rows = [[imageCell]];
+      const table = createBlock(document, "Columns", rows);
+      const captionEl = document.createElement("p");
       if (caption) {
         const em = document.createElement("em");
         em.textContent = caption.textContent.trim();
-        captionCell.appendChild(em);
+        captionEl.appendChild(em);
       }
-      const rows = caption ? [[imageCell, captionCell]] : [[imageCell]];
-      const table = createBlock(document, "Columns", rows);
       const hr = document.createElement("hr");
       const parent = infographic.closest(".imageinbodytext") || infographic;
       parent.remove();
       main.appendChild(hr);
       main.appendChild(table);
+      if (caption) main.appendChild(captionEl);
     } else {
       const div = document.createElement("div");
       if (picture || img) {
