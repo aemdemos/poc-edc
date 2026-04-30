@@ -34,6 +34,59 @@ function createBlock(document, blockName, rows) {
 }
 
 /**
+ * Get ALL viewport image sources from a picture element.
+ * Returns an array of { src, viewport } objects for each unique source.
+ */
+function getAllViewportSrcs(element) {
+  if (!element) return [];
+
+  const makeAbsolute = (src) => {
+    if (!src) return src;
+    if (src.startsWith('http')) return src;
+    if (src.startsWith('/')) return `${window.location.origin}${src}`;
+    return src;
+  };
+
+  const picture = element.tagName === 'PICTURE' ? element : element.closest('picture');
+  if (!picture) {
+    const img = element.tagName === 'IMG' ? element : element.querySelector('img');
+    return img ? [{ src: img.src, viewport: 'all' }] : [];
+  }
+
+  const sources = picture.querySelectorAll('source');
+  const img = picture.querySelector('img');
+  const variants = [];
+  const seenSrcs = new Set();
+
+  for (const source of sources) {
+    const media = source.getAttribute('media') || '';
+    const srcset = source.getAttribute('srcset');
+    if (!srcset) continue;
+    const absSrc = makeAbsolute(srcset);
+    if (seenSrcs.has(absSrc)) continue;
+    seenSrcs.add(absSrc);
+
+    let viewport = 'unknown';
+    if (media.includes('992')) viewport = 'desktop';
+    else if (media.includes('768')) viewport = 'tablet';
+    else if (media.includes('576')) viewport = 'mobile';
+
+    variants.push({ src: absSrc, viewport });
+  }
+
+  // Add fallback img src if it's different from all sources
+  if (img && img.src && !seenSrcs.has(img.src)) {
+    variants.push({ src: img.src, viewport: 'fallback' });
+  }
+
+  // Sort: mobile → tablet → desktop (smallest first)
+  const order = { mobile: 0, fallback: 1, tablet: 2, desktop: 3, unknown: 4 };
+  variants.sort((a, b) => (order[a.viewport] ?? 4) - (order[b.viewport] ?? 4));
+
+  return variants;
+}
+
+/**
  * Get the best (desktop) image src from a picture element or img.
  * Prefers the largest breakpoint source (min-width: 992px), falls back to img src.
  * Always returns an absolute URL.
@@ -98,13 +151,15 @@ function extractStickyNav(document, main) {
     div.appendChild(p);
   }
 
-  // Replace the stickynav container with our clean content
+  // Replace the stickynav container with our clean content + section break after it
+  const hr = document.createElement('hr');
   const stickyContainer = stickyNav.closest('.stickynav') || stickyNav;
-  stickyContainer.replaceWith(div);
+  stickyContainer.replaceWith(div, hr);
 }
 
 /**
  * Extract hero banner content
+ * Includes all viewport image variants (desktop, tablet, mobile) in the block.
  */
 function extractHero(document, main) {
   const heroSection = main.querySelector('section.c-hero-banner');
@@ -118,12 +173,24 @@ function extractHero(document, main) {
   const cell = document.createElement('div');
 
   if (picture || img) {
-    const newPicture = document.createElement('picture');
-    const newImg = document.createElement('img');
-    newImg.src = getDesktopImgSrc(picture || img) || (img ? img.src : '');
-    newImg.alt = img ? img.alt || '' : '';
-    newPicture.appendChild(newImg);
-    cell.appendChild(newPicture);
+    const allSrcs = getAllViewportSrcs(picture || img);
+    const alt = img ? img.alt || '' : '';
+
+    if (allSrcs.length > 1) {
+      // Multiple viewport variants — include all as separate images
+      allSrcs.forEach(({ src }) => {
+        const newImg = document.createElement('img');
+        newImg.src = src;
+        newImg.alt = alt;
+        cell.appendChild(newImg);
+      });
+    } else {
+      // Single image — just use it directly
+      const newImg = document.createElement('img');
+      newImg.src = allSrcs.length > 0 ? allSrcs[0].src : (img ? img.src : '');
+      newImg.alt = alt;
+      cell.appendChild(newImg);
+    }
   }
 
   if (heading) {
@@ -457,32 +524,82 @@ function extractClimateText(document, main) {
  * Extract the infographic image with caption
  */
 function extractInfographic(document, main) {
-  const infographic = main.querySelector('section.image-body-text.medium');
+  // Match infographic sections — can be .medium (2022) or .default with chart images (2021)
+  let infographic = main.querySelector('section.image-body-text.medium');
+  if (!infographic) {
+    // Fallback: find image-body-text sections with chart/infographic images (full-width, default--12)
+    const candidates = main.querySelectorAll('.imageinbodytext[class*="default--12"] section.image-body-text');
+    for (const candidate of candidates) {
+      const img = candidate.querySelector('img');
+      if (img && (img.alt.toLowerCase().includes('chart') || img.alt.toLowerCase().includes('infographic') || img.alt.toLowerCase().includes('target'))) {
+        infographic = candidate;
+        break;
+      }
+    }
+  }
   if (!infographic) return;
 
   const picture = infographic.querySelector('.content-image picture');
   const img = infographic.querySelector('.content-image img');
   const caption = infographic.querySelector('.image-caption p, .image-caption');
 
-  const div = document.createElement('div');
+  const allSrcs = getAllViewportSrcs(picture || img);
+  const alt = img ? img.alt || '' : '';
+  const hasViewportVariants = allSrcs.length > 1;
 
-  if (picture || img) {
-    const newImg = document.createElement('img');
-    newImg.src = getDesktopImgSrc(picture || img) || (img ? img.src : '');
-    newImg.alt = img ? img.alt || '' : '';
-    div.appendChild(newImg);
+  if (hasViewportVariants) {
+    // Multiple viewport images — wrap in a Columns block so columns.js handles the swap
+    // Add an <hr> before so the block starts in its own section
+    const imageCell = document.createElement('div');
+    allSrcs.forEach(({ src }) => {
+      const newImg = document.createElement('img');
+      newImg.src = src;
+      newImg.alt = alt;
+      imageCell.appendChild(newImg);
+    });
+
+    const captionCell = document.createElement('div');
+    if (caption) {
+      const em = document.createElement('em');
+      em.textContent = caption.textContent.trim();
+      captionCell.appendChild(em);
+    }
+
+    const rows = caption ? [[imageCell, captionCell]] : [[imageCell]];
+    const table = createBlock(document, 'Columns', rows);
+
+    // Insert section break before the block so it's in its own section
+    const hr = document.createElement('hr');
+
+    // Remove infographic from its current nested location
+    const parent = infographic.closest('.imageinbodytext') || infographic;
+    parent.remove();
+
+    // Insert hr + Columns table directly into main (body level) so it becomes its own section
+    main.appendChild(hr);
+    main.appendChild(table);
+  } else {
+    // Single image — keep as default content
+    const div = document.createElement('div');
+
+    if (picture || img) {
+      const newImg = document.createElement('img');
+      newImg.src = allSrcs.length > 0 ? allSrcs[0].src : (img ? img.src : '');
+      newImg.alt = alt;
+      div.appendChild(newImg);
+    }
+
+    if (caption) {
+      const em = document.createElement('em');
+      em.textContent = caption.textContent.trim();
+      const p = document.createElement('p');
+      p.appendChild(em);
+      div.appendChild(p);
+    }
+
+    const parent = infographic.closest('.imageinbodytext') || infographic;
+    parent.replaceWith(div);
   }
-
-  if (caption) {
-    const em = document.createElement('em');
-    em.textContent = caption.textContent.trim();
-    const p = document.createElement('p');
-    p.appendChild(em);
-    div.appendChild(p);
-  }
-
-  const parent = infographic.closest('.imageinbodytext') || infographic;
-  parent.replaceWith(div);
 }
 
 /**
@@ -589,10 +706,27 @@ export default {
     // 5. Insert section breaks
     insertSectionBreaks(document, main);
 
-    // 6. Resolve all remaining images to desktop sources
+    // 6. Resolve all remaining images — wrap viewport variants in Columns block for responsive swap
     main.querySelectorAll('picture').forEach((picture) => {
       const img = picture.querySelector('img');
-      if (img) {
+      if (!img) return;
+
+      const allSrcs = getAllViewportSrcs(picture);
+      const alt = img.alt || '';
+
+      if (allSrcs.length > 1) {
+        // Multiple viewport variants — wrap in Columns block for responsive handling
+        const imageCell = document.createElement('div');
+        allSrcs.forEach(({ src }) => {
+          const newImg = document.createElement('img');
+          newImg.src = src;
+          newImg.alt = alt;
+          imageCell.appendChild(newImg);
+        });
+        const table = createBlock(document, 'Columns', [[imageCell]]);
+        picture.replaceWith(table);
+      } else {
+        // Single source — just update img.src to desktop version
         const desktopSrc = getDesktopImgSrc(picture);
         if (desktopSrc && desktopSrc !== img.src) {
           img.src = desktopSrc;
