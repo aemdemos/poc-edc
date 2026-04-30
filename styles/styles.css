@@ -301,3 +301,9 @@ main .section.highlight {
   margin: 0;
   padding: 40px 0;
 }
+
+main .section.bio-hero {
+  background-color: var(--light-color);
+  padding: 40px 0;
+  text-align: center;
+}
