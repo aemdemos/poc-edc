@@ -3,6 +3,39 @@ import { createSliderControls, initSlider, showSlide } from '../../scripts/slide
 
 export { showSlide };
 
+function buildResponsivePicture(imageColumn) {
+  const pictures = imageColumn.querySelectorAll('picture');
+  if (pictures.length <= 1) return;
+
+  const imgs = [...pictures].map((pic) => pic.querySelector('img')).filter(Boolean);
+  if (imgs.length <= 1) return;
+
+  const picture = document.createElement('picture');
+  const breakpoints = [
+    { minWidth: 992, index: 0 },
+    { minWidth: 768, index: 1 },
+  ];
+
+  breakpoints.forEach(({ minWidth, index }) => {
+    if (imgs[index]) {
+      const source = document.createElement('source');
+      source.setAttribute('media', `(min-width: ${minWidth}px)`);
+      source.setAttribute('srcset', imgs[index].src);
+      picture.appendChild(source);
+    }
+  });
+
+  const fallbackImg = imgs[imgs.length - 1] || imgs[0];
+  const img = document.createElement('img');
+  img.src = fallbackImg.src;
+  img.alt = fallbackImg.alt || '';
+  img.loading = 'eager';
+  picture.appendChild(img);
+
+  imageColumn.textContent = '';
+  imageColumn.appendChild(picture);
+}
+
 function createSlide(row, slideIndex, carouselId) {
   const slide = document.createElement('li');
   slide.dataset.slideIndex = slideIndex;
@@ -11,6 +44,7 @@ function createSlide(row, slideIndex, carouselId) {
 
   row.querySelectorAll(':scope > div').forEach((column, colIdx) => {
     column.classList.add(`carousel-slide-${colIdx === 0 ? 'image' : 'content'}`);
+    if (colIdx === 0) buildResponsivePicture(column);
     slide.append(column);
   });
 
