@@ -91,6 +91,43 @@ var CustomImportScript = (() => {
     const cells = [[blockName], ...rows];
     return WebImporter.DOMUtils.createTable(cells, document);
   }
+  function getAllViewportSrcs(element) {
+    if (!element) return [];
+    const makeAbsolute = (src) => {
+      if (!src) return src;
+      if (src.startsWith("http")) return src;
+      if (src.startsWith("/")) return `${window.location.origin}${src}`;
+      return src;
+    };
+    const picture = element.tagName === "PICTURE" ? element : element.closest("picture");
+    if (!picture) {
+      const img2 = element.tagName === "IMG" ? element : element.querySelector("img");
+      return img2 ? [{ src: img2.src, viewport: "all" }] : [];
+    }
+    const sources = picture.querySelectorAll("source");
+    const img = picture.querySelector("img");
+    const variants = [];
+    const seenSrcs = /* @__PURE__ */ new Set();
+    for (const source of sources) {
+      const media = source.getAttribute("media") || "";
+      const srcset = source.getAttribute("srcset");
+      if (!srcset) continue;
+      const absSrc = makeAbsolute(srcset);
+      if (seenSrcs.has(absSrc)) continue;
+      seenSrcs.add(absSrc);
+      let viewport = "unknown";
+      if (media.includes("992")) viewport = "desktop";
+      else if (media.includes("768")) viewport = "tablet";
+      else if (media.includes("576")) viewport = "mobile";
+      variants.push({ src: absSrc, viewport });
+    }
+    if (img && img.src && !seenSrcs.has(img.src)) {
+      variants.push({ src: img.src, viewport: "fallback" });
+    }
+    const order = { mobile: 0, fallback: 1, tablet: 2, desktop: 3, unknown: 4 };
+    variants.sort((a, b) => (order[a.viewport] ?? 4) - (order[b.viewport] ?? 4));
+    return variants;
+  }
   function getDesktopImgSrc(element) {
     if (!element) return null;
     const makeAbsolute = (src) => {
@@ -136,8 +173,9 @@ var CustomImportScript = (() => {
       p.appendChild(strong);
       div.appendChild(p);
     }
+    const hr = document.createElement("hr");
     const stickyContainer = stickyNav.closest(".stickynav") || stickyNav;
-    stickyContainer.replaceWith(div);
+    stickyContainer.replaceWith(div, hr);
   }
   function extractHero(document, main) {
     const heroSection = main.querySelector("section.c-hero-banner");
@@ -148,12 +186,21 @@ var CustomImportScript = (() => {
     const img = heroSection.querySelector(".img-wrapper img, picture img");
     const cell = document.createElement("div");
     if (picture || img) {
-      const newPicture = document.createElement("picture");
-      const newImg = document.createElement("img");
-      newImg.src = getDesktopImgSrc(picture || img) || (img ? img.src : "");
-      newImg.alt = img ? img.alt || "" : "";
-      newPicture.appendChild(newImg);
-      cell.appendChild(newPicture);
+      const allSrcs = getAllViewportSrcs(picture || img);
+      const alt = img ? img.alt || "" : "";
+      if (allSrcs.length > 1) {
+        allSrcs.forEach(({ src }) => {
+          const newImg = document.createElement("img");
+          newImg.src = src;
+          newImg.alt = alt;
+          cell.appendChild(newImg);
+        });
+      } else {
+        const newImg = document.createElement("img");
+        newImg.src = allSrcs.length > 0 ? allSrcs[0].src : img ? img.src : "";
+        newImg.alt = alt;
+        cell.appendChild(newImg);
+      }
     }
     if (heading) {
       const h1 = document.createElement("h1");
@@ -401,27 +448,63 @@ var CustomImportScript = (() => {
     if (parent) parent.replaceWith(div);
   }
   function extractInfographic(document, main) {
-    const infographic = main.querySelector("section.image-body-text.medium");
+    let infographic = main.querySelector("section.image-body-text.medium");
+    if (!infographic) {
+      const candidates = main.querySelectorAll('.imageinbodytext[class*="default--12"] section.image-body-text');
+      for (const candidate of candidates) {
+        const img2 = candidate.querySelector("img");
+        if (img2 && (img2.alt.toLowerCase().includes("chart") || img2.alt.toLowerCase().includes("infographic") || img2.alt.toLowerCase().includes("target"))) {
+          infographic = candidate;
+          break;
+        }
+      }
+    }
     if (!infographic) return;
     const picture = infographic.querySelector(".content-image picture");
     const img = infographic.querySelector(".content-image img");
     const caption = infographic.querySelector(".image-caption p, .image-caption");
-    const div = document.createElement("div");
-    if (picture || img) {
-      const newImg = document.createElement("img");
-      newImg.src = getDesktopImgSrc(picture || img) || (img ? img.src : "");
-      newImg.alt = img ? img.alt || "" : "";
-      div.appendChild(newImg);
+    const allSrcs = getAllViewportSrcs(picture || img);
+    const alt = img ? img.alt || "" : "";
+    const hasViewportVariants = allSrcs.length > 1;
+    if (hasViewportVariants) {
+      const imageCell = document.createElement("div");
+      allSrcs.forEach(({ src }) => {
+        const newImg = document.createElement("img");
+        newImg.src = src;
+        newImg.alt = alt;
+        imageCell.appendChild(newImg);
+      });
+      const captionCell = document.createElement("div");
+      if (caption) {
+        const em = document.createElement("em");
+        em.textContent = caption.textContent.trim();
+        captionCell.appendChild(em);
+      }
+      const rows = caption ? [[imageCell, captionCell]] : [[imageCell]];
+      const table = createBlock(document, "Columns", rows);
+      const hr = document.createElement("hr");
+      const parent = infographic.closest(".imageinbodytext") || infographic;
+      parent.remove();
+      main.appendChild(hr);
+      main.appendChild(table);
+    } else {
+      const div = document.createElement("div");
+      if (picture || img) {
+        const newImg = document.createElement("img");
+        newImg.src = allSrcs.length > 0 ? allSrcs[0].src : img ? img.src : "";
+        newImg.alt = alt;
+        div.appendChild(newImg);
+      }
+      if (caption) {
+        const em = document.createElement("em");
+        em.textContent = caption.textContent.trim();
+        const p = document.createElement("p");
+        p.appendChild(em);
+        div.appendChild(p);
+      }
+      const parent = infographic.closest(".imageinbodytext") || infographic;
+      parent.replaceWith(div);
     }
-    if (caption) {
-      const em = document.createElement("em");
-      em.textContent = caption.textContent.trim();
-      const p = document.createElement("p");
-      p.appendChild(em);
-      div.appendChild(p);
-    }
-    const parent = infographic.closest(".imageinbodytext") || infographic;
-    parent.replaceWith(div);
   }
   function insertSectionBreaks(document, main) {
     const tables = [...main.querySelectorAll("table")];
@@ -500,7 +583,20 @@ var CustomImportScript = (() => {
       insertSectionBreaks(document, main);
       main.querySelectorAll("picture").forEach((picture) => {
         const img = picture.querySelector("img");
-        if (img) {
+        if (!img) return;
+        const allSrcs = getAllViewportSrcs(picture);
+        const alt = img.alt || "";
+        if (allSrcs.length > 1) {
+          const imageCell = document.createElement("div");
+          allSrcs.forEach(({ src }) => {
+            const newImg = document.createElement("img");
+            newImg.src = src;
+            newImg.alt = alt;
+            imageCell.appendChild(newImg);
+          });
+          const table = createBlock(document, "Columns", [[imageCell]]);
+          picture.replaceWith(table);
+        } else {
           const desktopSrc = getDesktopImgSrc(picture);
           if (desktopSrc && desktopSrc !== img.src) {
             img.src = desktopSrc;
