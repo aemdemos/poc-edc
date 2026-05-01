@@ -262,8 +262,11 @@ function extractKpiCards(document, main) {
   // Create a single Cards block with all KPI items
   const table = createBlock(document, 'Cards', kpiCards);
 
-  // Replace the first KPI element with the table, remove the rest
-  kpiElements[0].replaceWith(table);
+  // Insert a section break before the cards so intro text is in its own section
+  const hr = document.createElement('hr');
+
+  // Replace the first KPI element with hr + table, remove the rest
+  kpiElements[0].replaceWith(hr, table);
   for (let i = 1; i < kpiElements.length; i++) {
     kpiElements[i].remove();
   }
@@ -525,11 +528,20 @@ function extractClimateText(document, main) {
  */
 function extractInfographic(document, main) {
   // Match infographic sections — can be .medium (2022) or .default with chart images (2021)
-  let infographic = main.querySelector('section.image-body-text.medium');
+  // Skip sections that contain h3 links (those are story cards, not infographics)
+  let infographic = null;
+  const mediumSections = main.querySelectorAll('section.image-body-text.medium');
+  for (const section of mediumSections) {
+    if (!section.querySelector('h3 a, h3')) {
+      infographic = section;
+      break;
+    }
+  }
   if (!infographic) {
     // Fallback: find image-body-text sections with chart/infographic images (full-width, default--12)
     const candidates = main.querySelectorAll('.imageinbodytext[class*="default--12"] section.image-body-text');
     for (const candidate of candidates) {
+      if (candidate.querySelector('h3 a, h3')) continue;
       const img = candidate.querySelector('img');
       if (img && (img.alt.toLowerCase().includes('chart') || img.alt.toLowerCase().includes('infographic') || img.alt.toLowerCase().includes('target'))) {
         infographic = candidate;
@@ -602,6 +614,188 @@ function extractInfographic(document, main) {
     const parent = infographic.closest('.imageinbodytext') || infographic;
     parent.replaceWith(div);
   }
+}
+
+/**
+ * Extract success stories as a Cards block.
+ * Pattern: h2 "success stories" heading followed by story items,
+ * each with an image + linked h3 title + description paragraph.
+ * Source DOM: each story is in an .image-body-text container with img + (h3 link + p)
+ */
+function extractSuccessStories(document, main) {
+  // Find the success stories heading
+  const headings = main.querySelectorAll('h2');
+  let storiesHeading = null;
+  for (const h of headings) {
+    if (h.textContent.toLowerCase().includes('success stor')) {
+      storiesHeading = h;
+      break;
+    }
+  }
+  if (!storiesHeading) return;
+
+  // Collect story links — two patterns:
+  // Pattern A (2021): h3 > a (linked heading)
+  // Pattern B (2022): p > a where paragraph text equals link text (standalone title link)
+  const storyLinks = [];
+
+  // Check for h3 links (Pattern A)
+  main.querySelectorAll('h3 a').forEach((a) => storyLinks.push({ link: a, type: 'h3' }));
+
+  // Check for paragraph-only links (Pattern B)
+  // These appear AFTER the success stories heading in the DOM
+  if (storyLinks.length === 0) {
+    const allElements = [...main.querySelectorAll('*')];
+    const headingIdx = allElements.indexOf(storiesHeading);
+
+    // Find all <p> elements after the heading that contain a single link as their only meaningful content
+    main.querySelectorAll('p').forEach((p) => {
+      const pIdx = allElements.indexOf(p);
+      if (pIdx <= headingIdx) return; // Only look after the heading
+
+      const links = p.querySelectorAll('a');
+      if (links.length !== 1) return; // Must have exactly one link
+
+      const link = links[0];
+      // The paragraph text should be roughly equal to the link text (it's a title, not a sentence with inline link)
+      if (p.textContent.trim() === link.textContent.trim()) {
+        // Check this isn't a "Learn more" link
+        if (!link.textContent.toLowerCase().includes('learn more')) {
+          storyLinks.push({ link, type: 'p' });
+        }
+      }
+    });
+  }
+
+  if (storyLinks.length === 0) return;
+
+  const cards = [];
+  const processedImages = new Set();
+  const elementsToRemove = [];
+
+  storyLinks.forEach(({ link, type }) => {
+    const titleElement = type === 'h3' ? link.closest('h3') : link.closest('p');
+    if (!titleElement) return;
+
+    // Find description — next paragraph sibling that isn't a link-only paragraph
+    let desc = null;
+    let descEl = titleElement.nextElementSibling;
+    if (descEl && descEl.tagName === 'P') {
+      const descLink = descEl.querySelector('a');
+      // It's a description if it has more text than just a link
+      if (!descLink || descEl.textContent.trim() !== descLink.textContent.trim()) {
+        desc = descEl.textContent.trim();
+        elementsToRemove.push(descEl);
+      }
+    }
+
+    // Find associated image — look at previous sibling (image paragraph before the title)
+    let img = null;
+    let imgEl = titleElement.previousElementSibling;
+    if (imgEl && imgEl.querySelector('img')) {
+      img = imgEl.querySelector('img');
+      elementsToRemove.push(imgEl);
+    }
+    // Also check parent wrapper for image (Pattern A: image in sibling div)
+    if (!img) {
+      const wrapper = titleElement.parentElement?.parentElement;
+      if (wrapper) {
+        img = wrapper.querySelector('img');
+      }
+    }
+
+    const imageCell = document.createElement('div');
+    if (img && !processedImages.has(img.src)) {
+      const newImg = document.createElement('img');
+      newImg.src = img.src;
+      newImg.alt = img.alt || '';
+      imageCell.appendChild(newImg);
+      processedImages.add(img.src);
+    }
+
+    const textCell = document.createElement('div');
+    const title = document.createElement('p');
+    const a = document.createElement('a');
+    a.href = link.href;
+    a.textContent = link.textContent.trim();
+    const strong = document.createElement('strong');
+    strong.appendChild(a);
+    title.appendChild(strong);
+    textCell.appendChild(title);
+
+    if (desc) {
+      const p = document.createElement('p');
+      p.textContent = desc;
+      textCell.appendChild(p);
+    }
+
+    cards.push([imageCell, textCell]);
+    elementsToRemove.push(titleElement);
+  });
+
+  if (cards.length === 0) return;
+
+  // Create the Cards block
+  const table = createBlock(document, 'Cards', cards);
+
+  // Build replacement: heading + cards block
+  const sectionDiv = document.createElement('div');
+  const h2 = document.createElement('h2');
+  h2.textContent = storiesHeading.textContent.trim();
+  sectionDiv.appendChild(h2);
+  sectionDiv.appendChild(table);
+
+  // Replace the heading with our new section
+  storiesHeading.replaceWith(sectionDiv);
+
+  // Remove remaining story elements and their containers
+  elementsToRemove.forEach((el) => { if (el.parentElement) el.remove(); });
+
+  // Clean up any remaining h3 story duplicates
+  main.querySelectorAll('h3').forEach((h3) => {
+    const link = h3.querySelector('a');
+    if (link) {
+      let prev = h3.previousElementSibling;
+      if (prev && prev.querySelector('img')) prev.remove();
+      let next = h3.nextElementSibling;
+      if (next && next.tagName === 'P' && !next.querySelector('a')) next.remove();
+      h3.remove();
+    }
+  });
+
+  // Remove leftover story containers
+  main.querySelectorAll('.imageinbodytext section.image-body-text.medium').forEach((el) => {
+    if (el.querySelector('.text-after-image')) {
+      const parent = el.closest('.imageinbodytext');
+      if (parent) parent.remove();
+    }
+  });
+
+  // Remove ALL remaining instances of images we already captured in cards
+  // and any orphan link paragraphs that match story titles
+  processedImages.forEach((imgSrc) => {
+    main.querySelectorAll('img').forEach((img) => {
+      if (img.src === imgSrc && !sectionDiv.contains(img)) {
+        const p = img.closest('p') || img.closest('picture')?.parentElement || img.parentElement;
+        if (p && p !== main) p.remove();
+      }
+    });
+  });
+
+  // Remove orphan story link paragraphs (p > a only-child matching story titles)
+  storyLinks.forEach(({ link }) => {
+    main.querySelectorAll('a').forEach((a) => {
+      if (a.href === link.href && !sectionDiv.contains(a)) {
+        const p = a.closest('p') || a.closest('h3') || a.parentElement;
+        if (p && p !== main) {
+          // Also remove the description paragraph after it
+          const next = p.nextElementSibling;
+          if (next && next.tagName === 'P') next.remove();
+          p.remove();
+        }
+      }
+    });
+  });
 }
 
 /**
@@ -700,6 +894,7 @@ export default {
     extractContentColumns(document, main);
     extractOverview(document, main);
     extractClimateText(document, main);
+    extractSuccessStories(document, main);
     extractInfographic(document, main);
 
     // 4. Post-transform cleanup
@@ -736,14 +931,24 @@ export default {
       }
     });
 
-    // 7. Apply WebImporter built-in rules
+    // 7. Insert date modified as its own section (before metadata)
+    const dateModified = document.body.getAttribute('data-date-modified');
+    if (dateModified) {
+      const dateHr = document.createElement('hr');
+      const dateP = document.createElement('p');
+      dateP.textContent = dateModified;
+      main.appendChild(dateHr);
+      main.appendChild(dateP);
+    }
+
+    // 8. Apply WebImporter built-in rules
     const hr = document.createElement('hr');
     main.appendChild(hr);
     WebImporter.rules.createMetadata(main, document);
     WebImporter.rules.transformBackgroundImages(main, document);
     WebImporter.rules.adjustImageUrls(main, url, params.originalURL);
 
-    // 8. Generate path - full localized path (NOT index)
+    // 9. Generate path - full localized path (NOT index)
     const path = WebImporter.FileUtils.sanitizePath(
       new URL(params.originalURL).pathname.replace(/\/$/, '').replace(/\.html$/, '')
     );
