@@ -45,10 +45,14 @@ var CustomImportScript = (() => {
         "footer#footer",
         "footer.campaign-footer"
       ]);
-      WebImporter.DOMUtils.remove(element, [
-        ".modifieddate",
-        "section.c-date-modified"
-      ]);
+      element.querySelectorAll(".modifieddate, section.c-date-modified").forEach((el) => {
+        const dateSpan = el.querySelector(".c-date-modified__date, span");
+        if (dateSpan) {
+          document.body.setAttribute("data-date-modified", dateSpan.textContent.trim());
+        }
+        const container = el.closest(".modifieddate") || el;
+        container.remove();
+      });
       WebImporter.DOMUtils.remove(element, [
         ".c-keyline",
         ".key-line"
@@ -251,7 +255,8 @@ var CustomImportScript = (() => {
     });
     if (kpiCards.length === 0) return;
     const table = createBlock(document, "Cards", kpiCards);
-    kpiElements[0].replaceWith(table);
+    const hr = document.createElement("hr");
+    kpiElements[0].replaceWith(hr, table);
     for (let i = 1; i < kpiElements.length; i++) {
       kpiElements[i].remove();
     }
@@ -448,10 +453,18 @@ var CustomImportScript = (() => {
     if (parent) parent.replaceWith(div);
   }
   function extractInfographic(document, main) {
-    let infographic = main.querySelector("section.image-body-text.medium");
+    let infographic = null;
+    const mediumSections = main.querySelectorAll("section.image-body-text.medium");
+    for (const section of mediumSections) {
+      if (!section.querySelector("h3 a, h3")) {
+        infographic = section;
+        break;
+      }
+    }
     if (!infographic) {
       const candidates = main.querySelectorAll('.imageinbodytext[class*="default--12"] section.image-body-text');
       for (const candidate of candidates) {
+        if (candidate.querySelector("h3 a, h3")) continue;
         const img2 = candidate.querySelector("img");
         if (img2 && (img2.alt.toLowerCase().includes("chart") || img2.alt.toLowerCase().includes("infographic") || img2.alt.toLowerCase().includes("target"))) {
           infographic = candidate;
@@ -506,6 +519,135 @@ var CustomImportScript = (() => {
       const parent = infographic.closest(".imageinbodytext") || infographic;
       parent.replaceWith(div);
     }
+  }
+  function extractSuccessStories(document, main) {
+    const headings = main.querySelectorAll("h2");
+    let storiesHeading = null;
+    for (const h of headings) {
+      if (h.textContent.toLowerCase().includes("success stor")) {
+        storiesHeading = h;
+        break;
+      }
+    }
+    if (!storiesHeading) return;
+    const storyLinks = [];
+    main.querySelectorAll("h3 a").forEach((a) => storyLinks.push({ link: a, type: "h3" }));
+    if (storyLinks.length === 0) {
+      const allElements = [...main.querySelectorAll("*")];
+      const headingIdx = allElements.indexOf(storiesHeading);
+      main.querySelectorAll("p").forEach((p) => {
+        const pIdx = allElements.indexOf(p);
+        if (pIdx <= headingIdx) return;
+        const links = p.querySelectorAll("a");
+        if (links.length !== 1) return;
+        const link = links[0];
+        if (p.textContent.trim() === link.textContent.trim()) {
+          if (!link.textContent.toLowerCase().includes("learn more")) {
+            storyLinks.push({ link, type: "p" });
+          }
+        }
+      });
+    }
+    if (storyLinks.length === 0) return;
+    const cards = [];
+    const processedImages = /* @__PURE__ */ new Set();
+    const elementsToRemove = [];
+    storyLinks.forEach(({ link, type }) => {
+      const titleElement = type === "h3" ? link.closest("h3") : link.closest("p");
+      if (!titleElement) return;
+      let desc = null;
+      let descEl = titleElement.nextElementSibling;
+      if (descEl && descEl.tagName === "P") {
+        const descLink = descEl.querySelector("a");
+        if (!descLink || descEl.textContent.trim() !== descLink.textContent.trim()) {
+          desc = descEl.textContent.trim();
+          elementsToRemove.push(descEl);
+        }
+      }
+      let img = null;
+      let imgEl = titleElement.previousElementSibling;
+      if (imgEl && imgEl.querySelector("img")) {
+        img = imgEl.querySelector("img");
+        elementsToRemove.push(imgEl);
+      }
+      if (!img) {
+        const wrapper = titleElement.parentElement?.parentElement;
+        if (wrapper) {
+          img = wrapper.querySelector("img");
+        }
+      }
+      const imageCell = document.createElement("div");
+      if (img && !processedImages.has(img.src)) {
+        const newImg = document.createElement("img");
+        newImg.src = img.src;
+        newImg.alt = img.alt || "";
+        imageCell.appendChild(newImg);
+        processedImages.add(img.src);
+      }
+      const textCell = document.createElement("div");
+      const title = document.createElement("p");
+      const a = document.createElement("a");
+      a.href = link.href;
+      a.textContent = link.textContent.trim();
+      const strong = document.createElement("strong");
+      strong.appendChild(a);
+      title.appendChild(strong);
+      textCell.appendChild(title);
+      if (desc) {
+        const p = document.createElement("p");
+        p.textContent = desc;
+        textCell.appendChild(p);
+      }
+      cards.push([imageCell, textCell]);
+      elementsToRemove.push(titleElement);
+    });
+    if (cards.length === 0) return;
+    const table = createBlock(document, "Cards", cards);
+    const sectionDiv = document.createElement("div");
+    const h2 = document.createElement("h2");
+    h2.textContent = storiesHeading.textContent.trim();
+    sectionDiv.appendChild(h2);
+    sectionDiv.appendChild(table);
+    storiesHeading.replaceWith(sectionDiv);
+    elementsToRemove.forEach((el) => {
+      if (el.parentElement) el.remove();
+    });
+    main.querySelectorAll("h3").forEach((h3) => {
+      const link = h3.querySelector("a");
+      if (link) {
+        let prev = h3.previousElementSibling;
+        if (prev && prev.querySelector("img")) prev.remove();
+        let next = h3.nextElementSibling;
+        if (next && next.tagName === "P" && !next.querySelector("a")) next.remove();
+        h3.remove();
+      }
+    });
+    main.querySelectorAll(".imageinbodytext section.image-body-text.medium").forEach((el) => {
+      if (el.querySelector(".text-after-image")) {
+        const parent = el.closest(".imageinbodytext");
+        if (parent) parent.remove();
+      }
+    });
+    processedImages.forEach((imgSrc) => {
+      main.querySelectorAll("img").forEach((img) => {
+        if (img.src === imgSrc && !sectionDiv.contains(img)) {
+          const p = img.closest("p") || img.closest("picture")?.parentElement || img.parentElement;
+          if (p && p !== main) p.remove();
+        }
+      });
+    });
+    storyLinks.forEach(({ link }) => {
+      main.querySelectorAll("a").forEach((a) => {
+        if (a.href === link.href && !sectionDiv.contains(a)) {
+          const p = a.closest("p") || a.closest("h3") || a.parentElement;
+          if (p && p !== main) {
+            const next = p.nextElementSibling;
+            if (next && next.tagName === "P") next.remove();
+            p.remove();
+          }
+        }
+      });
+    });
   }
   function insertSectionBreaks(document, main) {
     const tables = [...main.querySelectorAll("table")];
@@ -579,6 +721,7 @@ var CustomImportScript = (() => {
       extractContentColumns(document, main);
       extractOverview(document, main);
       extractClimateText(document, main);
+      extractSuccessStories(document, main);
       extractInfographic(document, main);
       executeTransformers("afterTransform", main, payload);
       insertSectionBreaks(document, main);
@@ -604,6 +747,14 @@ var CustomImportScript = (() => {
           }
         }
       });
+      const dateModified = document.body.getAttribute("data-date-modified");
+      if (dateModified) {
+        const dateHr = document.createElement("hr");
+        const dateP = document.createElement("p");
+        dateP.textContent = dateModified;
+        main.appendChild(dateHr);
+        main.appendChild(dateP);
+      }
       const hr = document.createElement("hr");
       main.appendChild(hr);
       WebImporter.rules.createMetadata(main, document);

@@ -32,11 +32,15 @@ export default function transform(hookName, element, { document }) {
     // Keep the sticky nav bar content (report title + Download Report CTA)
     // It will be extracted as its own section by the import script
 
-    // Remove date modified section (captured in metadata)
-    WebImporter.DOMUtils.remove(element, [
-      '.modifieddate',
-      'section.c-date-modified',
-    ]);
+    // Extract date modified text and store it on the body for later placement
+    element.querySelectorAll('.modifieddate, section.c-date-modified').forEach((el) => {
+      const dateSpan = el.querySelector('.c-date-modified__date, span');
+      if (dateSpan) {
+        document.body.setAttribute('data-date-modified', dateSpan.textContent.trim());
+      }
+      const container = el.closest('.modifieddate') || el;
+      container.remove();
+    });
 
     // Remove keyline separators (become section breaks)
     WebImporter.DOMUtils.remove(element, [
