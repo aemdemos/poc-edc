@@ -1,0 +1,8 @@
+{
+  "status": "failed",
+  "url": "https://www.edc.ca/en/about-us/esg/environment.html",
+  "path": "en/about-us/esg/environment.html",
+  "timestamp": "2026-05-05T20:27:22.456Z",
+  "error": "page.goto: Timeout 45000ms exceeded.\nCall log:\n  - navigating to \"https://www.edc.ca/en/about-us/esg/environment.html\", waiting until \"domcontentloaded\"\n",
+  "errorStack": "page.goto: Timeout 45000ms exceeded.\nCall log:\n  - navigating to \"https://www.edc.ca/en/about-us/esg/environment.html\", waiting until \"domcontentloaded\"\n\n    at processUrl (/home/node/.excat-marketplace/excat/skills/excat-content-import/scripts/run-bulk-import.js:261:18)\n    at async main (/home/node/.excat-marketplace/excat/skills/excat-content-import/scripts/run-bulk-import.js:459:22)"
+}
