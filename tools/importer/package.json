@@ -1,0 +1,12 @@
+{
+  "name": "edc-importer",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "capture": "node parser/capture-page.mjs"
+  },
+  "devDependencies": {
+    "puppeteer": "^23.0.0"
+  }
+}
