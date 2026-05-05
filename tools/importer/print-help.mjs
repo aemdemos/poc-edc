@@ -6,8 +6,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const dir = path.dirname(fileURLToPath(import.meta.url));
-const importerRoot = path.resolve(dir, '..');
+const importerRoot = path.dirname(fileURLToPath(import.meta.url));
 const importEntry = path.join(importerRoot, 'import.js');
 const transformer = path.join(importerRoot, 'transformer', 'transform-dom.js');
 

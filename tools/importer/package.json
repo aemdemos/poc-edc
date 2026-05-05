@@ -6,7 +6,7 @@
   "scripts": {
     "capture": "node parser/capture-page.mjs",
     "fetch-html": "node parser/fetch-html.mjs",
-    "help": "node importer/print-help.mjs"
+    "help": "node print-help.mjs"
   },
   "devDependencies": {
     "puppeteer": "^23.0.0"

@@ -11,7 +11,7 @@ This folder supports **[AEM Importer](https://www.aem.live/developer/importer)**
 | **`parser/capture-page.mjs`** | **Parser** — Puppeteer capture (DOM outline, stylesheet previews, computed samples, HTML snippets) per viewport. |
 | **`parser/fetch-html.mjs`** | **Parser** — raw HTML download via `fetch` (no browser). |
 | **`parser/lib/slug-from-url.mjs`** | Shared slug helper for default output paths. |
-| **`importer/print-help.mjs`** | Local commands and paths (no network). |
+| **`print-help.mjs`** | Local commands and paths (no network). |
 
 ## Quick start — AEM Importer / aemcoder
 
