@@ -14,21 +14,12 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { slugFromUrl } from './lib/slug-from-url.mjs';
 
 const WAIT_MS = 5000;
 const MAX_STYLE_RULE_CHARS_PER_SHEET = 120000;
 const OUTLINE_MAX_DEPTH = 10;
 const COMPUTED_SAMPLE_MAX_NODES = 80;
-
-function slugFromUrl(urlString) {
-  try {
-    const u = new URL(urlString);
-    const base = u.pathname.replace(/\/$/, '').replace(/\.html?$/i, '') || 'index';
-    return `${u.hostname}${base}`.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'page';
-  } catch {
-    return 'page';
-  }
-}
 
 async function loadPuppeteer() {
   try {
