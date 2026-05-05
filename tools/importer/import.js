@@ -84,26 +84,41 @@ function rewriteImagesThroughImporterProxy(root, originalURL) {
   root.querySelectorAll('img[src]').forEach((img) => {
     try {
       let abs = img.getAttribute('src');
-      if (!abs) return;
+      if (!abs || abs.startsWith('data:') || abs.startsWith('blob:')) return;
       if (abs.startsWith('/')) abs = `${base.origin}${abs}`;
       const u = new URL(abs);
+      if (!u.protocol.startsWith('http')) return;
       u.searchParams.append('host', u.origin);
-      img.src = `${proxyOrigin}${u.pathname}${u.search}`;
+      img.setAttribute('src', `${proxyOrigin}${u.pathname}${u.search}`);
     } catch (e) {
       // eslint-disable-next-line no-console
       console.warn('[import.js] proxy rewrite skipped', e.message);
+    }
+  });
+
+  // Clean up any links/anchors with malformed href that could break decodeURI
+  root.querySelectorAll('a[href]').forEach((a) => {
+    try {
+      const href = a.getAttribute('href');
+      if (href) decodeURI(href);
+    } catch {
+      a.setAttribute('href', encodeURI(a.getAttribute('href')));
     }
   });
 }
 
 /**
  * Replace CSS background-image with <img> children where WebImporter helper exists.
+ * Skips gradient-only backgrounds that would produce invalid img src values.
  * @param {HTMLElement} root
  * @param {Document} document
  */
 function promoteBackgroundImages(root, document) {
-  const candidates = root.querySelectorAll('[style*="background"], [style*="Background"]');
+  const candidates = root.querySelectorAll('[style*="background-image"], [style*="Background-image"]');
   candidates.forEach((el) => {
+    const style = el.getAttribute('style') || '';
+    if (!style.includes('url(')) return;
+    if (/background[^:]*:\s*(linear|radial|conic)-gradient/i.test(style)) return;
     try {
       WebImporter.DOMUtils.replaceBackgroundByImg(el, document);
     } catch {
@@ -114,13 +129,18 @@ function promoteBackgroundImages(root, document) {
 
 /**
  * Prefer article/main roots — edc.ca case studies use `article.article` and no `<main>`.
+ * Only use main/[role="main"] if it actually contains content (some sites use empty landmarks).
  * @param {Document} document
  * @returns {HTMLElement}
  */
 function pickContentRoot(document) {
-  return document.querySelector('main')
-    || document.querySelector('[role="main"]')
-    || document.querySelector('article.article')
+  const main = document.querySelector('main');
+  if (main && main.children.length > 0) return main;
+
+  const roleMain = document.querySelector('[role="main"]');
+  if (roleMain && roleMain.children.length > 0) return roleMain;
+
+  return document.querySelector('article.article')
     || document.querySelector('article')
     || document.body;
 }
@@ -141,13 +161,16 @@ function removeSiteChrome(document, contentRoot) {
     '.cookie-banner',
     '.cookie-consent',
     '#cookie-banner',
+    '#onetrust-consent-sdk',
     '[aria-label*="cookie" i]',
     '[class*="cookie" i]',
     '[id*="onetrust" i]',
+    '[class*="recaptcha" i]',
+    '.skip-to-content',
+    '#skip-to-main-content',
   ].join(',');
-  document.querySelectorAll(globalChrome).forEach((el) => {
-    if (!contentRoot.contains(el)) el.remove();
-  });
+  // Remove all chrome from document regardless of position
+  document.querySelectorAll(globalChrome).forEach((el) => el.remove());
 
   document.querySelectorAll('header, nav, [role="navigation"]').forEach((el) => {
     if (!contentRoot.contains(el)) el.remove();
@@ -191,30 +214,28 @@ function tagDuplicateSectionVariants(contentRoot) {
 }
 
 /**
- * Insert horizontal rules before H2 headings (not H3) for cleaner DA section splits.
- * Only splits at major structural boundaries, not within body text flow.
+ * Insert horizontal rules between block tables and between major content sections.
+ * Each block table should be in its own section for proper EDS rendering.
  * @param {HTMLElement} main
  * @param {Document} document
  */
 function insertSectionBreaks(main, document) {
-  const headings = [...main.querySelectorAll('h2')];
-  headings.forEach((h, i) => {
-    if (i === 0) return;
-    if (h.closest('table')) return;
-    const hr = document.createElement('hr');
-    h.parentElement.insertBefore(hr, h);
-  });
+  const topChildren = [...main.children];
+  for (let i = 1; i < topChildren.length; i += 1) {
+    const curr = topChildren[i];
+    const prev = topChildren[i - 1];
+    if (prev.tagName === 'HR') continue;
 
-  const topLevel = [...main.children];
-  let prev = null;
-  topLevel.forEach((child) => {
-    if (child.tagName !== 'SECTION') return;
-    if (prev && prev.tagName === 'SECTION') {
+    const prevIsTable = prev.tagName === 'TABLE';
+    const currIsTable = curr.tagName === 'TABLE';
+    const currIsH2 = curr.tagName === 'H2';
+
+    if (prevIsTable || currIsTable || currIsH2) {
       const hr = document.createElement('hr');
-      main.insertBefore(hr, child);
+      main.insertBefore(hr, curr);
+      i += 1;
     }
-    prev = child;
-  });
+  }
 }
 
 /**
@@ -245,7 +266,7 @@ function appendMetadataBlock(main, document) {
   }
 
   const block = WebImporter.Blocks.getMetadataBlock(document, meta);
-  main.prepend(block);
+  main.append(block);
 }
 
 /**
@@ -305,36 +326,33 @@ function wrapAemComponentAsBlock(document, sourceEl, blockName, variant) {
 }
 
 /**
- * Normalize pullquote attribution into a clean paragraph.
- * Handles EDC's structure: author name + dashes/commas in nested spans.
+ * Extract quote text and attribution from EDC's pullquote structure.
+ * Returns { quoteText, attributionText } for building the 2-row Quote block table.
  * @param {Element} blockquoteEl
- * @param {Document} document
  */
-function normalizePullquoteAttribution(blockquoteEl, document) {
+function extractPullquoteContent(blockquoteEl) {
   const quoteHeading = blockquoteEl.querySelector('h3');
+  const quoteText = quoteHeading ? quoteHeading.textContent.trim() : '';
+
   const authorContainer = blockquoteEl.querySelector('div:not(:first-child), .author, .meta-info');
-  if (!quoteHeading || !authorContainer) return;
-
   const textParts = [];
-  const walkText = (node) => {
-    if (node.nodeType === 3) {
-      const t = node.textContent.trim();
-      if (t && t !== ',' && t !== '—' && t !== '-') textParts.push(t);
-    } else if (node.nodeType === 1) {
-      if (node.tagName === 'STRONG' || node.tagName === 'B') {
+  if (authorContainer) {
+    const walkText = (node) => {
+      if (node.nodeType === 3) {
         const t = node.textContent.trim();
-        if (t === '—' || t === '-') return;
+        if (t && t !== ',' && t !== '—' && t !== '-') textParts.push(t);
+      } else if (node.nodeType === 1) {
+        if (node.tagName === 'STRONG' || node.tagName === 'B') {
+          const t = node.textContent.trim();
+          if (t === '—' || t === '-') return;
+        }
+        [...node.childNodes].forEach(walkText);
       }
-      [...node.childNodes].forEach(walkText);
-    }
-  };
-  walkText(authorContainer);
-
-  if (textParts.length > 0) {
-    const attribution = document.createElement('p');
-    attribution.textContent = `— ${textParts.join(', ')}`;
-    authorContainer.replaceWith(attribution);
+    };
+    walkText(authorContainer);
   }
+
+  return { quoteText, attributionText: textParts.join(', ') };
 }
 
 /**
@@ -342,21 +360,16 @@ function normalizePullquoteAttribution(blockquoteEl, document) {
  * @param {Document} document
  * @param {HTMLElement} article
  */
-function wrapSucceedCtaBlock(document, article) {
-  const textDivs = [...article.querySelectorAll('.cmp-text')];
-  const ctaDiv = textDivs.find((el) => {
-    const h2 = el.querySelector('h2');
-    return h2 && /succeed with edc/i.test(h2.textContent);
-  });
-  if (!ctaDiv) return;
-
-  const wrapper = ctaDiv.closest('.text.aem-GridColumn') || ctaDiv;
-  wrapAemComponentAsBlock(document, wrapper, 'Columns', 'cta');
+/**
+ * "Succeed with EDC" is just default content (H2 + paragraphs) — no special block needed.
+ * Just ensure it's cleanly extracted from AEM wrapper divs.
+ */
+function cleanSucceedCtaSection(document, article) {
+  // No-op: content flows naturally as default content after chrome removal
 }
 
 /**
- * Handle .modifieddate regardless of whether it's inside or outside the article.
- * Moves it into the content root and wraps as a block.
+ * Handle .modifieddate — extract as simple text paragraph.
  * @param {Document} document
  * @param {HTMLElement} contentRoot
  */
@@ -364,10 +377,15 @@ function handleModifiedDate(document, contentRoot) {
   const modDate = document.querySelector('.modifieddate');
   if (!modDate) return;
 
+  const dateText = modDate.textContent.trim();
+  const p = document.createElement('p');
+  p.textContent = dateText;
+
   if (!contentRoot.contains(modDate)) {
-    contentRoot.append(modDate);
+    contentRoot.append(p);
+  } else {
+    modDate.replaceWith(p);
   }
-  wrapAemComponentAsBlock(document, modDate, 'Columns', 'date-modified');
 }
 
 /**
@@ -403,65 +421,187 @@ function applyEdcCaseStudyPageBlocks(document, contentRoot, originalURL) {
     wrapAemComponentAsBlock(document, el, 'Hero', 'case-study');
   });
 
-  // Breadcrumbs
-  scoped('.breadcrumb-wrapper').forEach((el) => {
-    wrapAemComponentAsBlock(document, el, 'Breadcrumbs', null);
-  });
+  // Breadcrumbs — remove (handled by navigation, not a content block)
+  scoped('.breadcrumb-wrapper').forEach((el) => el.remove());
 
-  // Company at a glance — contains nested .c-pdf-download, split into two blocks
-  scoped('.companyataglance').forEach((el) => {
-    const pdfSection = el.querySelector('.c-pdf-download');
+  // Build Columns (case-study-layout) — body content left, sidebar right
+  const companyEls = scoped('.companyataglance');
+  const bodyContainer = article.querySelector('.articlebodycontainer');
+  if (companyEls.length > 0 && bodyContainer) {
+    const sidebarEl = companyEls[0];
+
+    // Build sidebar content (right column)
+    const sidebarCell = document.createElement('div');
+
+    // PDF download
+    const pdfSection = sidebarEl.querySelector('.c-pdf-download');
     if (pdfSection) {
-      const pdfWrapper = document.createElement('div');
-      pdfWrapper.append(pdfSection);
-      const pdfTable = WebImporter.DOMUtils.createTable(
-        [['Cards (pdf-download)'], [pdfWrapper]],
-        document,
-      );
-      el.parentElement.insertBefore(pdfTable, el);
+      const pdfTitle = pdfSection.querySelector('.download-title');
+      const pdfLink = pdfSection.querySelector('.download-link');
+      if (pdfTitle) {
+        const h4 = document.createElement('h4');
+        h4.textContent = pdfTitle.textContent.trim();
+        sidebarCell.append(h4);
+      }
+      if (pdfLink) {
+        const p = document.createElement('p');
+        const a = document.createElement('a');
+        a.href = pdfLink.getAttribute('href') || '';
+        a.textContent = pdfLink.textContent.trim();
+        p.append(a);
+        sidebarCell.append(p);
+      }
     }
-    wrapAemComponentAsBlock(document, el, 'Cards', 'company-at-a-glance');
-  });
 
-  // Standalone .pdfdownload (only if not already handled inside companyataglance)
+    // Company profile
+    const companyName = sidebarEl.querySelector('.company-name');
+    const profileH4 = document.createElement('h4');
+    profileH4.textContent = 'Company profile';
+    sidebarCell.append(profileH4);
+    if (companyName) {
+      const nameH4 = document.createElement('h4');
+      nameH4.textContent = companyName.textContent.trim();
+      sidebarCell.append(nameH4);
+    }
+    const items = sidebarEl.querySelectorAll('.item');
+    items.forEach((item) => {
+      const label = item.querySelector('.label, h4');
+      const value = item.querySelector('.text, p');
+      const p = document.createElement('p');
+      const strong = document.createElement('strong');
+      strong.textContent = `${label ? label.textContent.trim() : ''}:`;
+      p.append(strong, ` ${value ? value.textContent.trim() : ''}`);
+      sidebarCell.append(p);
+    });
+
+    // Build body content (left column) — first text blocks up to the pullquote
+    const bodyCell = document.createElement('div');
+    const bodyTexts = bodyContainer.querySelectorAll('.text.aem-GridColumn');
+    const firstImage = bodyContainer.querySelector('.imageinbodytext img');
+    bodyTexts.forEach((textDiv) => {
+      const cmpText = textDiv.querySelector('.cmp-text');
+      if (cmpText && !cmpText.textContent.includes('Succeed with EDC')) {
+        [...cmpText.children].forEach((child) => bodyCell.append(child.cloneNode(true)));
+      }
+    });
+    if (firstImage) {
+      const p = document.createElement('p');
+      p.append(firstImage.cloneNode(true));
+      bodyCell.append(p);
+    }
+
+    // Create Columns table
+    const columnsTable = WebImporter.DOMUtils.createTable(
+      [['Columns (case-study-layout)'], [bodyCell, sidebarCell]],
+      document,
+    );
+
+    // Replace the sidebar + body containers with the columns table
+    sidebarEl.closest('.articlerightcontainer')?.remove();
+    const bodyParent = bodyContainer.parentElement;
+    bodyContainer.remove();
+    if (bodyParent) bodyParent.prepend(columnsTable);
+    else article.append(columnsTable);
+
+    // Remove remaining duplicates
+    companyEls.slice(1).forEach((dup) => dup.remove());
+  }
+
+  // Remove standalone .pdfdownload wrappers
   scoped('.pdfdownload').forEach((el) => {
-    if (!el.closest('table')) {
-      wrapAemComponentAsBlock(document, el, 'Cards', 'pdf-download');
-    }
+    if (!el.closest('table')) el.remove();
   });
 
-  // Pullquotes — normalize attribution before wrapping
+  // Pullquotes — build 2-row table (row1=quote, row2=attribution) matching Quote block structure
   const pullquotes = scoped('.pullquote');
   pullquotes.forEach((el, i) => {
     const bq = el.querySelector('blockquote');
-    if (bq) normalizePullquoteAttribution(bq, document);
+    const { quoteText, attributionText } = bq
+      ? extractPullquoteContent(bq)
+      : { quoteText: el.textContent.trim(), attributionText: '' };
+
     const variant = pullquotes.length > 1 ? `pullquote-${i + 1}` : 'pullquote';
-    wrapAemComponentAsBlock(document, el, 'Quote', variant);
+    const title = `Quote (${variant})`;
+
+    const quoteCell = document.createElement('p');
+    quoteCell.textContent = quoteText;
+
+    const attrCell = document.createElement('p');
+    if (attributionText) {
+      const em = document.createElement('em');
+      em.textContent = attributionText;
+      attrCell.append(attributionText.split(',')[0], ', ', em);
+      attrCell.textContent = '';
+      const [name, ...rest] = attributionText.split(', ');
+      attrCell.textContent = name;
+      if (rest.length) {
+        attrCell.textContent += ', ';
+        const emEl = document.createElement('em');
+        emEl.textContent = rest.join(', ');
+        attrCell.append(emEl);
+      }
+    }
+
+    const table = WebImporter.DOMUtils.createTable(
+      [[title], [quoteCell], [attrCell]],
+      document,
+    );
+    el.replaceWith(table);
   });
 
-  // Remaining non-empty section titles (if any survived the empty check)
-  const sectionTitles = scoped('.sectiontitle');
-  sectionTitles.forEach((el, i) => {
-    const variant = sectionTitles.length > 1 ? `section-heading-${i + 1}` : 'section-heading';
-    wrapAemComponentAsBlock(document, el, 'Columns', variant);
+  // Remove any remaining section title decorative elements
+  scoped('.sectiontitle').forEach((el) => el.remove());
+
+  // Images in body text — unwrap from AEM container, keep as inline images (default content)
+  scoped('.imageinbodytext').forEach((el) => {
+    const img = el.querySelector('img');
+    if (img) {
+      const p = document.createElement('p');
+      p.append(img);
+      el.replaceWith(p);
+    } else {
+      el.remove();
+    }
   });
 
-  // Images in body text
-  const imageBlocks = scoped('.imageinbodytext');
-  imageBlocks.forEach((el, i) => {
-    const variant = imageBlocks.length > 1 ? `media-${i + 1}` : 'media';
-    wrapAemComponentAsBlock(document, el, 'Columns', variant);
+  // EDC services / recommended articles — build Cards with image|text rows
+  scoped('.list').forEach((el) => {
+    const articles = el.querySelectorAll('.recommended-article-content, .ra-premium');
+    const rows = [['Cards (edc-services)']];
+    if (articles.length > 0) {
+      articles.forEach((art) => {
+        const img = art.closest('.recommended-article-premium, .recommended-articles-premium-wrapper')?.querySelector('img');
+        const link = art.querySelector('a');
+        const desc = art.querySelector('p, .description-text');
+        const imgCell = document.createElement('div');
+        if (img) imgCell.append(img.cloneNode(true));
+        const textCell = document.createElement('div');
+        if (link) {
+          const h4 = document.createElement('h4');
+          const a = document.createElement('a');
+          a.href = link.getAttribute('href') || '';
+          a.textContent = link.textContent.trim();
+          h4.append(a);
+          textCell.append(h4);
+        }
+        if (desc) {
+          const p = document.createElement('p');
+          p.textContent = desc.textContent.trim();
+          textCell.append(p);
+        }
+        rows.push([imgCell, textCell]);
+      });
+    } else {
+      const inner = document.createElement('div');
+      while (el.firstChild) inner.append(el.firstChild);
+      rows.push([inner]);
+    }
+    const table = WebImporter.DOMUtils.createTable(rows, document);
+    el.replaceWith(table);
   });
 
-  // EDC services / recommended articles list
-  const lists = scoped('.list');
-  lists.forEach((el, i) => {
-    const variant = lists.length > 1 ? `edc-list-${i + 1}` : 'edc-services';
-    wrapAemComponentAsBlock(document, el, 'Cards', variant);
-  });
-
-  // "Succeed with EDC" CTA
-  wrapSucceedCtaBlock(document, article);
+  // "Succeed with EDC" — kept as default content (H2 + paragraphs)
+  cleanSucceedCtaSection(document, article);
 
   // Modified date — query from document level (it's outside the article)
   handleModifiedDate(document, contentRoot);
@@ -502,10 +642,34 @@ export default {
       'script',
       'noscript',
       'link[rel="stylesheet"]',
-      'iframe[src*="googletagmanager"]',
+      'iframe',
       '.hidden',
       '[aria-hidden="true"][style*="display: none"]',
     ]);
+
+    // Sanitize all URLs to prevent URIError: URI malformed in downstream markdown generation
+    contentRoot.querySelectorAll('a[href]').forEach((a) => {
+      try {
+        decodeURI(a.getAttribute('href'));
+      } catch {
+        try {
+          a.setAttribute('href', encodeURI(decodeURIComponent(a.getAttribute('href'))));
+        } catch {
+          a.setAttribute('href', a.getAttribute('href').replace(/%(?![0-9A-Fa-f]{2})/g, '%25'));
+        }
+      }
+    });
+    contentRoot.querySelectorAll('img[src]').forEach((img) => {
+      try {
+        decodeURI(img.getAttribute('src'));
+      } catch {
+        try {
+          img.setAttribute('src', encodeURI(decodeURIComponent(img.getAttribute('src'))));
+        } catch {
+          img.setAttribute('src', img.getAttribute('src').replace(/%(?![0-9A-Fa-f]{2})/g, '%25'));
+        }
+      }
+    });
 
     return contentRoot;
   },
