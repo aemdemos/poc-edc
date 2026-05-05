@@ -23,6 +23,452 @@ var CustomImportScript = (() => {
     default: () => import_esg_environment_default
   });
 
+  // tools/importer/parsers/hero.js
+  function parse(element, { document, getAllViewportSrcs: getAllViewportSrcs2 }) {
+    const heading = element.querySelector("h1");
+    const subtitle = element.querySelector(".content p, p");
+    const picture = element.querySelector("picture");
+    const img = element.querySelector("img");
+    const cell = document.createElement("div");
+    if (picture || img) {
+      const allSrcs = getAllViewportSrcs2(picture || img);
+      const alt = img ? img.alt || "" : "";
+      if (allSrcs.length > 1) {
+        allSrcs.forEach(({ src }) => {
+          const newImg = document.createElement("img");
+          newImg.src = src;
+          newImg.alt = alt;
+          cell.appendChild(newImg);
+        });
+      } else {
+        const newImg = document.createElement("img");
+        newImg.src = allSrcs.length > 0 ? allSrcs[0].src : img ? img.src : "";
+        newImg.alt = alt;
+        cell.appendChild(newImg);
+      }
+    }
+    if (heading) {
+      const h1 = document.createElement("h1");
+      h1.textContent = heading.textContent.trim();
+      cell.appendChild(h1);
+    }
+    if (subtitle && subtitle.textContent.trim() && !subtitle.querySelector("a")) {
+      const p = document.createElement("p");
+      p.textContent = subtitle.textContent.trim();
+      cell.appendChild(p);
+    }
+    const cells = [["Hero"], [cell]];
+    const table = WebImporter.DOMUtils.createTable(cells, document);
+    element.replaceWith(table);
+  }
+
+  // tools/importer/parsers/cards.js
+  function parseNewsCards(element, { document, main, getDesktopImgSrc: getDesktopImgSrc2 }) {
+    const newsHeading = [...main.querySelectorAll("h2")].find((h) => h.textContent.toLowerCase().includes("news and"));
+    if (!newsHeading) return;
+    const cards = [];
+    const elementsToRemove = [];
+    const allImageBodyText = main.querySelectorAll('.imageinbodytext, [class*="imageinbodytext"]');
+    const allEls = [...main.querySelectorAll("*")];
+    const newsIdx = allEls.indexOf(newsHeading);
+    const nextH2 = [...main.querySelectorAll("h2")].find((h) => allEls.indexOf(h) > newsIdx && h !== newsHeading);
+    const nextH2Idx = nextH2 ? allEls.indexOf(nextH2) : Infinity;
+    allImageBodyText.forEach((container) => {
+      const containerIdx = allEls.indexOf(container);
+      if (containerIdx <= newsIdx || containerIdx >= nextH2Idx) return;
+      const img = container.querySelector("img");
+      const h3 = container.querySelector("h3");
+      if (!h3) return;
+      const desc = [...container.querySelectorAll("p")].find((p) => !p.querySelector("a") && p.textContent.trim().length > 10);
+      const linkEl = container.querySelector("p a");
+      const imageCell = document.createElement("div");
+      if (img) {
+        const newImg = document.createElement("img");
+        newImg.src = img.src;
+        newImg.alt = img.alt || "";
+        imageCell.appendChild(newImg);
+      }
+      const textCell = document.createElement("div");
+      const title = document.createElement("p");
+      const strong = document.createElement("strong");
+      strong.textContent = h3.textContent.trim();
+      title.appendChild(strong);
+      textCell.appendChild(title);
+      if (desc) {
+        const p = document.createElement("p");
+        p.textContent = desc.textContent.trim();
+        textCell.appendChild(p);
+      }
+      if (linkEl) {
+        const p = document.createElement("p");
+        const a = document.createElement("a");
+        a.href = linkEl.href;
+        a.textContent = linkEl.textContent.trim();
+        p.appendChild(a);
+        textCell.appendChild(p);
+      }
+      cards.push([imageCell, textCell]);
+      elementsToRemove.push(container);
+    });
+    if (cards.length === 0) return;
+    const h2 = document.createElement("h2");
+    h2.textContent = newsHeading.textContent.trim();
+    const table = WebImporter.DOMUtils.createTable([["Cards"], ...cards], document);
+    newsHeading.replaceWith(h2, table);
+    elementsToRemove.forEach((el) => {
+      if (el.parentElement) el.remove();
+    });
+  }
+  function parseCustomerStories(element, { document, main }) {
+    const heading = [...main.querySelectorAll("h2")].find((h) => h.textContent.includes("Customer stories"));
+    if (!heading) return;
+    const container = heading.parentElement;
+    const list = container ? container.querySelector("ul, ol") : null;
+    if (!list) return;
+    const cards = [];
+    list.querySelectorAll("li").forEach((li) => {
+      const img = li.querySelector("img");
+      const titleLink = li.querySelector("h3 a");
+      const desc = [...li.querySelectorAll("p")].find((p) => !p.querySelector("a") && p.textContent.trim().length > 10);
+      const imageCell = document.createElement("div");
+      if (img) {
+        const newImg = document.createElement("img");
+        newImg.src = img.src;
+        newImg.alt = img.alt || "";
+        imageCell.appendChild(newImg);
+      }
+      const textCell = document.createElement("div");
+      if (titleLink) {
+        const p = document.createElement("p");
+        const strong = document.createElement("strong");
+        const a = document.createElement("a");
+        a.href = titleLink.href;
+        a.textContent = titleLink.textContent.trim();
+        strong.appendChild(a);
+        p.appendChild(strong);
+        textCell.appendChild(p);
+      }
+      if (desc) {
+        const p = document.createElement("p");
+        p.textContent = desc.textContent.trim();
+        textCell.appendChild(p);
+      }
+      cards.push([imageCell, textCell]);
+    });
+    if (cards.length === 0) return;
+    const h2 = document.createElement("h2");
+    h2.textContent = heading.textContent.trim();
+    const table = WebImporter.DOMUtils.createTable([["Cards"], ...cards], document);
+    heading.remove();
+    list.replaceWith(h2, table);
+  }
+  function parseKpiStats(element, { document, main }) {
+    const heading = [...main.querySelectorAll("h2")].find((h) => h.textContent.toLowerCase().includes("by the numbers"));
+    if (!heading) return;
+    const cards = [];
+    const elementsToRemove = [heading];
+    const allH2s = [...main.querySelectorAll("h2")];
+    const statH2s = allH2s.filter((h) => h.textContent.trim().match(/^\$|^\d+\.?\d*%/));
+    statH2s.forEach((statH2) => {
+      let desc = statH2.nextElementSibling;
+      if (!desc || desc.tagName !== "P") {
+        desc = statH2.parentElement.querySelector("p");
+      }
+      if (desc) {
+        const cell = document.createElement("div");
+        const h = document.createElement("h2");
+        h.textContent = statH2.textContent.trim();
+        cell.appendChild(h);
+        const p = document.createElement("p");
+        p.textContent = desc.textContent.trim();
+        cell.appendChild(p);
+        cards.push([cell]);
+        elementsToRemove.push(statH2, desc);
+      }
+    });
+    if (cards.length === 0) return;
+    let introP = null;
+    const introCandidate = [...main.querySelectorAll("p")].find((p) => {
+      const text = p.textContent.toLowerCase();
+      return text.includes("measuring and monitoring") || text.includes("we believe that good") || text.includes("performance is key") || text.includes("details on our");
+    });
+    if (introCandidate) {
+      introP = introCandidate;
+      elementsToRemove.push(introCandidate);
+    }
+    const sectionDiv = document.createElement("div");
+    const h2 = document.createElement("h2");
+    h2.textContent = heading.textContent.trim();
+    sectionDiv.appendChild(h2);
+    if (introP) {
+      const p = document.createElement("p");
+      p.innerHTML = introP.innerHTML;
+      sectionDiv.appendChild(p);
+    }
+    const table = WebImporter.DOMUtils.createTable([["Cards"], ...cards], document);
+    sectionDiv.appendChild(table);
+    heading.replaceWith(sectionDiv);
+    elementsToRemove.forEach((el) => {
+      if (el.parentElement) el.remove();
+    });
+  }
+  function parsePoliciesReports(element, { document, main }) {
+    const policyCards = document.querySelectorAll(".c-product-form-card");
+    if (policyCards.length === 0) return;
+    const cards = [];
+    policyCards.forEach((card) => {
+      const titleEl = card.querySelector("h2.title, .card-content h2");
+      const descEl = card.querySelector("p.description, .card-content p");
+      const linkEl = card.querySelector(".card-actions a, a.c-interaction-button");
+      if (!titleEl) return;
+      const textCell = document.createElement("div");
+      const titleP = document.createElement("p");
+      const strong = document.createElement("strong");
+      strong.textContent = titleEl.textContent.trim();
+      titleP.appendChild(strong);
+      textCell.appendChild(titleP);
+      if (descEl) {
+        const p = document.createElement("p");
+        p.textContent = descEl.textContent.trim();
+        textCell.appendChild(p);
+      }
+      if (linkEl) {
+        const p = document.createElement("p");
+        const a = document.createElement("a");
+        a.href = linkEl.href;
+        a.textContent = linkEl.textContent.trim();
+        p.appendChild(a);
+        textCell.appendChild(p);
+      }
+      cards.push([textCell]);
+    });
+    if (cards.length === 0) return;
+    const heading = [...main.querySelectorAll("h2")].find((h) => h.textContent.toLowerCase().includes("policies") && h.textContent.toLowerCase().includes("reports"));
+    const complementary = document.querySelector('[role="complementary"], aside');
+    const sectionDiv = document.createElement("div");
+    if (heading) {
+      const h2 = document.createElement("h2");
+      h2.textContent = heading.textContent.trim();
+      sectionDiv.appendChild(h2);
+      const intro = heading.nextElementSibling;
+      if (intro && intro.tagName === "P" && intro.textContent.trim().length > 20) {
+        const p = document.createElement("p");
+        p.textContent = intro.textContent.trim();
+        sectionDiv.appendChild(p);
+      }
+    }
+    const table = WebImporter.DOMUtils.createTable([["Cards"], ...cards], document);
+    sectionDiv.appendChild(table);
+    const seeAll = [...main.querySelectorAll("a")].find((a) => a.textContent.toLowerCase().includes("see all policies"));
+    if (seeAll) {
+      const p = document.createElement("p");
+      const a = document.createElement("a");
+      a.href = seeAll.href;
+      a.textContent = seeAll.textContent.trim();
+      p.appendChild(a);
+      sectionDiv.appendChild(p);
+    }
+    if (complementary) {
+      complementary.replaceWith(sectionDiv);
+    } else if (heading) {
+      heading.replaceWith(sectionDiv);
+    }
+  }
+
+  // tools/importer/parsers/accordion.js
+  function parse2(element, { document, main }) {
+    const regions = main.querySelectorAll('[role="region"]');
+    const items = [];
+    regions.forEach((region) => {
+      const button = region.querySelector("button");
+      const heading = region.querySelector("h3");
+      if (!button || !heading) return;
+      const title = button.textContent.trim();
+      if (title.includes("Cookie") || title.includes("Privacy") || !title) return;
+      if (title.match(/From \d{4}/i)) return;
+      const contentElements = [...region.children].filter((el) => el.tagName !== "H3");
+      const richContent = document.createElement("div");
+      contentElements.forEach((el) => richContent.appendChild(el.cloneNode(true)));
+      items.push({ title, richContent, region });
+    });
+    if (items.length === 0) return;
+    const groups = [];
+    let group = [items[0]];
+    for (let i = 1; i < items.length; i++) {
+      const prev = items[i - 1].region;
+      const curr = items[i].region;
+      let distance = 0;
+      let el = prev.nextElementSibling;
+      while (el && el !== curr && distance < 5) {
+        distance++;
+        el = el.nextElementSibling;
+      }
+      if (distance < 5) {
+        group.push(items[i]);
+      } else {
+        groups.push([...group]);
+        group = [items[i]];
+      }
+    }
+    groups.push(group);
+    groups.forEach((groupItems) => {
+      const rows = groupItems.map((item) => {
+        const titleCell = document.createElement("div");
+        titleCell.textContent = item.title;
+        const contentCell = document.createElement("div");
+        const paras = item.richContent.querySelectorAll("p, li");
+        paras.forEach((p) => {
+          const newP = document.createElement("p");
+          const link = p.querySelector("a");
+          if (link) {
+            newP.innerHTML = p.innerHTML;
+          } else {
+            newP.textContent = p.textContent.trim();
+          }
+          if (newP.textContent.trim()) contentCell.appendChild(newP);
+        });
+        return [titleCell, contentCell];
+      });
+      const table = WebImporter.DOMUtils.createTable([["Accordion"], ...rows], document);
+      groupItems[0].region.replaceWith(table);
+      for (let i = 1; i < groupItems.length; i++) {
+        if (groupItems[i].region.parentElement) groupItems[i].region.remove();
+      }
+    });
+  }
+
+  // tools/importer/parsers/tabs.js
+  function parse3(element, { document, main }) {
+    const tablist = main.querySelector('[role="tablist"]');
+    if (!tablist) return;
+    const tabs = [...tablist.querySelectorAll('[role="tab"]')].filter((t) => !t.textContent.includes("Cookie") && !t.textContent.includes("Privacy"));
+    const panels = main.querySelectorAll('[role="tabpanel"]');
+    if (tabs.length === 0) return;
+    const rows = [];
+    tabs.forEach((tab, i) => {
+      const tabName = tab.textContent.trim();
+      const panel = panels[i];
+      const titleCell = document.createElement("div");
+      titleCell.textContent = tabName;
+      const contentCell = document.createElement("div");
+      if (panel) {
+        const paras = panel.querySelectorAll("p");
+        paras.forEach((p) => {
+          if (p.textContent.trim()) {
+            const newP = document.createElement("p");
+            newP.textContent = p.textContent.trim();
+            contentCell.appendChild(newP);
+          }
+        });
+      }
+      if (!contentCell.textContent.trim()) contentCell.textContent = tabName;
+      rows.push([titleCell, contentCell]);
+    });
+    const table = WebImporter.DOMUtils.createTable([["Tabs"], ...rows], document);
+    const tabContainer = tablist.closest('[class*="tab"]') || tablist.parentElement;
+    if (tabContainer) tabContainer.replaceWith(table);
+    panels.forEach((p) => {
+      if (p.parentElement) p.remove();
+    });
+    const fromRegion = [...main.querySelectorAll('[role="region"]')].find((r) => {
+      const btn = r.querySelector("button");
+      return btn && btn.textContent.match(/From \d{4}/i);
+    });
+    if (fromRegion) {
+      const btn = fromRegion.querySelector("button");
+      const contentElements = [...fromRegion.children].filter((el) => el.tagName !== "H3");
+      const titleCell = document.createElement("div");
+      titleCell.textContent = btn.textContent.trim();
+      const contentCell = document.createElement("div");
+      contentElements.forEach((el) => {
+        const paras = el.querySelectorAll ? el.querySelectorAll("p") : [];
+        paras.forEach((p) => {
+          if (p.textContent.trim()) {
+            const newP = document.createElement("p");
+            newP.textContent = p.textContent.trim();
+            contentCell.appendChild(newP);
+          }
+        });
+      });
+      const accordionTable = WebImporter.DOMUtils.createTable([["Accordion"], [titleCell, contentCell]], document);
+      table.after(accordionTable);
+      fromRegion.remove();
+    }
+  }
+
+  // tools/importer/parsers/agreements.js
+  function parse4(element, { document, main }) {
+    const heading = [...main.querySelectorAll("h2")].find((h) => h.textContent.toLowerCase().includes("agreements") && h.textContent.toLowerCase().includes("memberships"));
+    if (!heading) return;
+    const sectionDiv = document.createElement("div");
+    const h2 = document.createElement("h2");
+    h2.textContent = heading.textContent.trim();
+    sectionDiv.appendChild(h2);
+    let foundContent = false;
+    const agreementsPara = [...main.querySelectorAll("p")].find((p) => p.textContent.includes("agreements and standards") || p.textContent.includes("contributing member"));
+    if (agreementsPara) {
+      const p = document.createElement("p");
+      p.textContent = agreementsPara.textContent.trim();
+      sectionDiv.appendChild(p);
+      const nextP = agreementsPara.nextElementSibling;
+      if (nextP && nextP.tagName === "P" && nextP.querySelector("a")) {
+        const linkP = document.createElement("p");
+        linkP.innerHTML = nextP.innerHTML;
+        sectionDiv.appendChild(linkP);
+        nextP.remove();
+      }
+      agreementsPara.remove();
+      foundContent = true;
+    }
+    if (!foundContent) {
+      let sibling = heading.nextElementSibling;
+      while (sibling) {
+        if (sibling.tagName === "H2" || sibling.tagName === "HR") break;
+        if (sibling.tagName === "P") {
+          const p = document.createElement("p");
+          const link = sibling.querySelector("a");
+          if (link) {
+            p.innerHTML = sibling.innerHTML;
+          } else {
+            p.textContent = sibling.textContent.trim();
+          }
+          if (p.textContent.trim()) {
+            sectionDiv.appendChild(p);
+            foundContent = true;
+          }
+          const next = sibling.nextElementSibling;
+          sibling.remove();
+          sibling = next;
+        } else if (sibling.tagName === "DIV") {
+          sibling.querySelectorAll("p").forEach((para) => {
+            if (para.textContent.trim()) {
+              const p = document.createElement("p");
+              const link = para.querySelector("a");
+              if (link) {
+                p.innerHTML = para.innerHTML;
+              } else {
+                p.textContent = para.textContent.trim();
+              }
+              sectionDiv.appendChild(p);
+              foundContent = true;
+            }
+          });
+          const next = sibling.nextElementSibling;
+          sibling.remove();
+          sibling = next;
+        } else {
+          break;
+        }
+      }
+    }
+    const metaCells = [["Section Metadata"], ["style", "highlight"]];
+    const metaTable = WebImporter.DOMUtils.createTable(metaCells, document);
+    sectionDiv.appendChild(metaTable);
+    const hrBefore = document.createElement("hr");
+    const hrAfter = document.createElement("hr");
+    heading.replaceWith(hrBefore, sectionDiv, hrAfter);
+  }
+
   // tools/importer/transformers/esg-cleanup.js
   function transform(hookName, element, { document }) {
     if (hookName === "beforeTransform") {
@@ -107,18 +553,31 @@ var CustomImportScript = (() => {
   }
 
   // tools/importer/import-esg-environment.js
-  function executeTransformers(hookName, element, payload) {
-    [transform].forEach((fn) => {
-      try {
-        fn(hookName, element, payload);
-      } catch (e) {
-        console.error(`Transformer failed:`, e);
-      }
-    });
-  }
-  function createBlock(document, blockName, rows) {
-    return WebImporter.DOMUtils.createTable([[blockName], ...rows], document);
-  }
+  var parsers = {
+    "hero": parse,
+    "news-cards": parseNewsCards,
+    "customer-stories": parseCustomerStories,
+    "kpi-stats": parseKpiStats,
+    "policies": parsePoliciesReports,
+    "accordion": parse2,
+    "tabs": parse3,
+    "agreements": parse4
+  };
+  var transformers = [transform];
+  var PAGE_TEMPLATE = {
+    name: "esg-environment",
+    description: "EDC ESG information pages with hero, news cards, accordions, tabs, customer stories, KPIs, agreements, and policies.",
+    blocks: [
+      { name: "hero", instances: [".c-hero-banner", 'section[class*="hero"]', '[class*="herobanner"]'] },
+      { name: "news-cards", instances: [".imageinbodytext"] },
+      { name: "accordion", instances: ['[role="region"]'] },
+      { name: "tabs", instances: ['[role="tablist"]'] },
+      { name: "customer-stories", instances: [".c-card-slider", '[class*="card-listing"]'] },
+      { name: "kpi-stats", instances: ['[class*="stats"]'] },
+      { name: "agreements", instances: ["h2"] },
+      { name: "policies", instances: [".c-product-form-card"] }
+    ]
+  };
   function getAllViewportSrcs(element) {
     if (!element) return [];
     const makeAbsolute = (src) => {
@@ -173,461 +632,15 @@ var CustomImportScript = (() => {
     const img = element.tagName === "IMG" ? element : element.querySelector("img");
     return img ? img.src : null;
   }
-  function extractHero(document, main) {
-    const heroSection = main.querySelector('.c-hero-banner, section[class*="hero"], [class*="herobanner"]');
-    if (!heroSection) return;
-    const heading = heroSection.querySelector("h1");
-    const subtitle = heroSection.querySelector(".content p, p");
-    const picture = heroSection.querySelector("picture");
-    const img = heroSection.querySelector("img");
-    const cell = document.createElement("div");
-    if (picture || img) {
-      const allSrcs = getAllViewportSrcs(picture || img);
-      const alt = img ? img.alt || "" : "";
-      if (allSrcs.length > 1) {
-        allSrcs.forEach(({ src }) => {
-          const newImg = document.createElement("img");
-          newImg.src = src;
-          newImg.alt = alt;
-          cell.appendChild(newImg);
-        });
-      } else {
-        const newImg = document.createElement("img");
-        newImg.src = allSrcs.length > 0 ? allSrcs[0].src : img ? img.src : "";
-        newImg.alt = alt;
-        cell.appendChild(newImg);
-      }
-    }
-    if (heading) {
-      const h1 = document.createElement("h1");
-      h1.textContent = heading.textContent.trim();
-      cell.appendChild(h1);
-    }
-    if (subtitle && subtitle.textContent.trim() && !subtitle.querySelector("a")) {
-      const p = document.createElement("p");
-      p.textContent = subtitle.textContent.trim();
-      cell.appendChild(p);
-    }
-    const table = createBlock(document, "Hero", [[cell]]);
-    heroSection.replaceWith(table);
-  }
-  function extractNewsCards(document, main) {
-    const newsHeading = [...main.querySelectorAll("h2")].find((h) => h.textContent.toLowerCase().includes("news and"));
-    if (!newsHeading) return;
-    const cards = [];
-    const elementsToRemove = [];
-    const allImageBodyText = main.querySelectorAll('.imageinbodytext, [class*="imageinbodytext"]');
-    const allEls = [...main.querySelectorAll("*")];
-    const newsIdx = allEls.indexOf(newsHeading);
-    const nextH2 = [...main.querySelectorAll("h2")].find((h) => allEls.indexOf(h) > newsIdx && h !== newsHeading);
-    const nextH2Idx = nextH2 ? allEls.indexOf(nextH2) : Infinity;
-    allImageBodyText.forEach((container) => {
-      const containerIdx = allEls.indexOf(container);
-      if (containerIdx <= newsIdx || containerIdx >= nextH2Idx) return;
-      const img = container.querySelector("img");
-      const h3 = container.querySelector("h3");
-      if (!h3) return;
-      const desc = [...container.querySelectorAll("p")].find((p) => !p.querySelector("a") && p.textContent.trim().length > 10);
-      const linkEl = container.querySelector("p a");
-      const imageCell = document.createElement("div");
-      if (img) {
-        const newImg = document.createElement("img");
-        newImg.src = img.src;
-        newImg.alt = img.alt || "";
-        imageCell.appendChild(newImg);
-      }
-      const textCell = document.createElement("div");
-      const title = document.createElement("p");
-      const strong = document.createElement("strong");
-      strong.textContent = h3.textContent.trim();
-      title.appendChild(strong);
-      textCell.appendChild(title);
-      if (desc) {
-        const p = document.createElement("p");
-        p.textContent = desc.textContent.trim();
-        textCell.appendChild(p);
-      }
-      if (linkEl) {
-        const p = document.createElement("p");
-        const a = document.createElement("a");
-        a.href = linkEl.href;
-        a.textContent = linkEl.textContent.trim();
-        p.appendChild(a);
-        textCell.appendChild(p);
-      }
-      cards.push([imageCell, textCell]);
-      elementsToRemove.push(container);
-    });
-    if (cards.length === 0) return;
-    const h2 = document.createElement("h2");
-    h2.textContent = newsHeading.textContent.trim();
-    const table = createBlock(document, "Cards", cards);
-    newsHeading.replaceWith(h2, table);
-    elementsToRemove.forEach((el) => {
-      if (el.parentElement) el.remove();
-    });
-  }
-  function extractAccordions(document, main) {
-    const regions = main.querySelectorAll('[role="region"]');
-    const items = [];
-    regions.forEach((region) => {
-      const button = region.querySelector("button");
-      const heading = region.querySelector("h3");
-      if (!button || !heading) return;
-      const title = button.textContent.trim();
-      if (title.includes("Cookie") || title.includes("Privacy") || !title) return;
-      if (title.match(/From \d{4}/i)) return;
-      const contentElements = [...region.children].filter((el) => el.tagName !== "H3");
-      const richContent = document.createElement("div");
-      contentElements.forEach((el) => richContent.appendChild(el.cloneNode(true)));
-      items.push({ title, richContent, region });
-    });
-    if (items.length === 0) return;
-    const groups = [];
-    let group = [items[0]];
-    for (let i = 1; i < items.length; i++) {
-      const prev = items[i - 1].region;
-      const curr = items[i].region;
-      let distance = 0;
-      let el = prev.nextElementSibling;
-      while (el && el !== curr && distance < 5) {
-        distance++;
-        el = el.nextElementSibling;
-      }
-      if (distance < 5) {
-        group.push(items[i]);
-      } else {
-        groups.push([...group]);
-        group = [items[i]];
-      }
-    }
-    groups.push(group);
-    groups.forEach((groupItems) => {
-      const rows = groupItems.map((item) => {
-        const titleCell = document.createElement("div");
-        titleCell.textContent = item.title;
-        const contentCell = document.createElement("div");
-        const paras = item.richContent.querySelectorAll("p, li");
-        paras.forEach((p) => {
-          const newP = document.createElement("p");
-          const link = p.querySelector("a");
-          if (link) {
-            newP.innerHTML = p.innerHTML;
-          } else {
-            newP.textContent = p.textContent.trim();
-          }
-          if (newP.textContent.trim()) contentCell.appendChild(newP);
-        });
-        return [titleCell, contentCell];
-      });
-      const table = createBlock(document, "Accordion", rows);
-      groupItems[0].region.replaceWith(table);
-      for (let i = 1; i < groupItems.length; i++) {
-        if (groupItems[i].region.parentElement) groupItems[i].region.remove();
+  function executeTransformers(hookName, element, payload) {
+    const enhancedPayload = { ...payload, template: PAGE_TEMPLATE };
+    transformers.forEach((transformerFn) => {
+      try {
+        transformerFn.call(null, hookName, element, enhancedPayload);
+      } catch (e) {
+        console.error(`Transformer failed at ${hookName}:`, e);
       }
     });
-  }
-  function extractTabs(document, main) {
-    const tablist = main.querySelector('[role="tablist"]');
-    if (!tablist) return;
-    const tabs = [...tablist.querySelectorAll('[role="tab"]')].filter((t) => !t.textContent.includes("Cookie") && !t.textContent.includes("Privacy"));
-    const panels = main.querySelectorAll('[role="tabpanel"]');
-    if (tabs.length === 0) return;
-    const rows = [];
-    tabs.forEach((tab, i) => {
-      const tabName = tab.textContent.trim();
-      const panel = panels[i];
-      const titleCell = document.createElement("div");
-      titleCell.textContent = tabName;
-      const contentCell = document.createElement("div");
-      if (panel) {
-        const paras = panel.querySelectorAll("p");
-        paras.forEach((p) => {
-          if (p.textContent.trim()) {
-            const newP = document.createElement("p");
-            newP.textContent = p.textContent.trim();
-            contentCell.appendChild(newP);
-          }
-        });
-      }
-      if (!contentCell.textContent.trim()) contentCell.textContent = tabName;
-      rows.push([titleCell, contentCell]);
-    });
-    const table = createBlock(document, "Tabs", rows);
-    const tabContainer = tablist.closest('[class*="tab"]') || tablist.parentElement;
-    if (tabContainer) tabContainer.replaceWith(table);
-    panels.forEach((p) => {
-      if (p.parentElement) p.remove();
-    });
-    const fromRegion = [...main.querySelectorAll('[role="region"]')].find((r) => {
-      const btn = r.querySelector("button");
-      return btn && btn.textContent.match(/From \d{4}/i);
-    });
-    if (fromRegion) {
-      const btn = fromRegion.querySelector("button");
-      const contentElements = [...fromRegion.children].filter((el) => el.tagName !== "H3");
-      const titleCell = document.createElement("div");
-      titleCell.textContent = btn.textContent.trim();
-      const contentCell = document.createElement("div");
-      contentElements.forEach((el) => {
-        const paras = el.querySelectorAll ? el.querySelectorAll("p") : [];
-        paras.forEach((p) => {
-          if (p.textContent.trim()) {
-            const newP = document.createElement("p");
-            newP.textContent = p.textContent.trim();
-            contentCell.appendChild(newP);
-          }
-        });
-      });
-      const accordionTable = createBlock(document, "Accordion", [[titleCell, contentCell]]);
-      table.after(accordionTable);
-      fromRegion.remove();
-    }
-  }
-  function extractCustomerStories(document, main) {
-    const heading = [...main.querySelectorAll("h2")].find((h) => h.textContent.includes("Customer stories"));
-    if (!heading) return;
-    const container = heading.parentElement;
-    const list = container ? container.querySelector("ul, ol") : null;
-    if (!list) return;
-    const cards = [];
-    list.querySelectorAll("li").forEach((li) => {
-      const img = li.querySelector("img");
-      const titleLink = li.querySelector("h3 a");
-      const desc = [...li.querySelectorAll("p")].find((p) => !p.querySelector("a") && p.textContent.trim().length > 10);
-      const imageCell = document.createElement("div");
-      if (img) {
-        const newImg = document.createElement("img");
-        newImg.src = img.src;
-        newImg.alt = img.alt || "";
-        imageCell.appendChild(newImg);
-      }
-      const textCell = document.createElement("div");
-      if (titleLink) {
-        const p = document.createElement("p");
-        const strong = document.createElement("strong");
-        const a = document.createElement("a");
-        a.href = titleLink.href;
-        a.textContent = titleLink.textContent.trim();
-        strong.appendChild(a);
-        p.appendChild(strong);
-        textCell.appendChild(p);
-      }
-      if (desc) {
-        const p = document.createElement("p");
-        p.textContent = desc.textContent.trim();
-        textCell.appendChild(p);
-      }
-      cards.push([imageCell, textCell]);
-    });
-    if (cards.length === 0) return;
-    const h2 = document.createElement("h2");
-    h2.textContent = heading.textContent.trim();
-    const table = createBlock(document, "Cards", cards);
-    heading.remove();
-    list.replaceWith(h2, table);
-  }
-  function extractKpiStats(document, main) {
-    const heading = [...main.querySelectorAll("h2")].find((h) => h.textContent.toLowerCase().includes("by the numbers"));
-    if (!heading) return;
-    const cards = [];
-    const elementsToRemove = [heading];
-    const allH2s = [...main.querySelectorAll("h2")];
-    const statH2s = allH2s.filter((h) => h.textContent.trim().match(/^\$|^\d+\.?\d*%/));
-    statH2s.forEach((statH2) => {
-      let desc = statH2.nextElementSibling;
-      if (!desc || desc.tagName !== "P") {
-        desc = statH2.parentElement.querySelector("p");
-      }
-      if (desc) {
-        const cell = document.createElement("div");
-        const h = document.createElement("h2");
-        h.textContent = statH2.textContent.trim();
-        cell.appendChild(h);
-        const p = document.createElement("p");
-        p.textContent = desc.textContent.trim();
-        cell.appendChild(p);
-        cards.push([cell]);
-        elementsToRemove.push(statH2, desc);
-      }
-    });
-    if (cards.length === 0) return;
-    let introP = null;
-    const allPs = [...main.querySelectorAll("p")];
-    const introCandidate = allPs.find((p) => {
-      const text = p.textContent.toLowerCase();
-      return text.includes("measuring and monitoring") || text.includes("we believe that good") || text.includes("performance is key") || text.includes("details on our");
-    });
-    if (introCandidate) {
-      introP = introCandidate;
-      elementsToRemove.push(introCandidate);
-    }
-    const sectionDiv = document.createElement("div");
-    const h2 = document.createElement("h2");
-    h2.textContent = heading.textContent.trim();
-    sectionDiv.appendChild(h2);
-    if (introP) {
-      const p = document.createElement("p");
-      p.innerHTML = introP.innerHTML;
-      sectionDiv.appendChild(p);
-    }
-    const table = createBlock(document, "Cards", cards);
-    sectionDiv.appendChild(table);
-    heading.replaceWith(sectionDiv);
-    elementsToRemove.forEach((el) => {
-      if (el.parentElement) el.remove();
-    });
-  }
-  function extractAgreements(document, main) {
-    const heading = [...main.querySelectorAll("h2")].find((h) => h.textContent.toLowerCase().includes("agreements") && h.textContent.toLowerCase().includes("memberships"));
-    if (!heading) return;
-    const sectionDiv = document.createElement("div");
-    const h2 = document.createElement("h2");
-    h2.textContent = heading.textContent.trim();
-    sectionDiv.appendChild(h2);
-    let foundContent = false;
-    const headingParent = heading.parentElement;
-    const grandParent = headingParent ? headingParent.parentElement : null;
-    const agreementsPara = [...main.querySelectorAll("p")].find((p) => p.textContent.includes("agreements and standards") || p.textContent.includes("contributing member"));
-    if (agreementsPara) {
-      const p = document.createElement("p");
-      p.textContent = agreementsPara.textContent.trim();
-      sectionDiv.appendChild(p);
-      const nextP = agreementsPara.nextElementSibling;
-      if (nextP && nextP.tagName === "P" && nextP.querySelector("a")) {
-        const linkP = document.createElement("p");
-        linkP.innerHTML = nextP.innerHTML;
-        sectionDiv.appendChild(linkP);
-        nextP.remove();
-      }
-      agreementsPara.remove();
-      foundContent = true;
-    }
-    if (!foundContent) {
-      let sibling = heading.nextElementSibling;
-      while (sibling) {
-        if (sibling.tagName === "H2" || sibling.tagName === "HR") break;
-        if (sibling.tagName === "P") {
-          const p = document.createElement("p");
-          const link = sibling.querySelector("a");
-          if (link) {
-            p.innerHTML = sibling.innerHTML;
-          } else {
-            p.textContent = sibling.textContent.trim();
-          }
-          if (p.textContent.trim()) {
-            sectionDiv.appendChild(p);
-            foundContent = true;
-          }
-          const next = sibling.nextElementSibling;
-          sibling.remove();
-          sibling = next;
-        } else if (sibling.tagName === "DIV") {
-          sibling.querySelectorAll("p").forEach((para) => {
-            if (para.textContent.trim()) {
-              const p = document.createElement("p");
-              const link = para.querySelector("a");
-              if (link) {
-                p.innerHTML = para.innerHTML;
-              } else {
-                p.textContent = para.textContent.trim();
-              }
-              sectionDiv.appendChild(p);
-              foundContent = true;
-            }
-          });
-          const next = sibling.nextElementSibling;
-          sibling.remove();
-          sibling = next;
-        } else {
-          break;
-        }
-      }
-    }
-    if (!foundContent) {
-      const fallback = [...main.querySelectorAll("p")].find((p) => p.textContent.includes("agreements and standards") || p.textContent.includes("best practices"));
-      if (fallback) {
-        const p = document.createElement("p");
-        p.textContent = fallback.textContent.trim();
-        sectionDiv.appendChild(p);
-        const nextP = fallback.nextElementSibling;
-        if (nextP && nextP.tagName === "P" && nextP.querySelector("a")) {
-          const linkP = document.createElement("p");
-          linkP.innerHTML = nextP.innerHTML;
-          sectionDiv.appendChild(linkP);
-          nextP.remove();
-        }
-        fallback.remove();
-      }
-    }
-    const metaCells = [["Section Metadata"], ["style", "highlight"]];
-    const metaTable = WebImporter.DOMUtils.createTable(metaCells, document);
-    sectionDiv.appendChild(metaTable);
-    const hrBefore = document.createElement("hr");
-    const hrAfter = document.createElement("hr");
-    heading.replaceWith(hrBefore, sectionDiv, hrAfter);
-  }
-  function extractPoliciesReports(document, main) {
-    const policyCards = document.querySelectorAll(".c-product-form-card");
-    if (policyCards.length === 0) return;
-    const cards = [];
-    policyCards.forEach((card) => {
-      const titleEl = card.querySelector("h2.title, .card-content h2");
-      const descEl = card.querySelector("p.description, .card-content p");
-      const linkEl = card.querySelector(".card-actions a, a.c-interaction-button");
-      if (!titleEl) return;
-      const textCell = document.createElement("div");
-      const titleP = document.createElement("p");
-      const strong = document.createElement("strong");
-      strong.textContent = titleEl.textContent.trim();
-      titleP.appendChild(strong);
-      textCell.appendChild(titleP);
-      if (descEl) {
-        const p = document.createElement("p");
-        p.textContent = descEl.textContent.trim();
-        textCell.appendChild(p);
-      }
-      if (linkEl) {
-        const p = document.createElement("p");
-        const a = document.createElement("a");
-        a.href = linkEl.href;
-        a.textContent = linkEl.textContent.trim();
-        p.appendChild(a);
-        textCell.appendChild(p);
-      }
-      cards.push([textCell]);
-    });
-    if (cards.length === 0) return;
-    const heading = [...main.querySelectorAll("h2")].find((h) => h.textContent.toLowerCase().includes("policies") && h.textContent.toLowerCase().includes("reports"));
-    const complementary = document.querySelector('[role="complementary"], aside');
-    const sectionDiv = document.createElement("div");
-    if (heading) {
-      const h2 = document.createElement("h2");
-      h2.textContent = heading.textContent.trim();
-      sectionDiv.appendChild(h2);
-      const intro = heading.nextElementSibling;
-      if (intro && intro.tagName === "P" && intro.textContent.trim().length > 20) {
-        const p = document.createElement("p");
-        p.textContent = intro.textContent.trim();
-        sectionDiv.appendChild(p);
-      }
-    }
-    const table = createBlock(document, "Cards", cards);
-    sectionDiv.appendChild(table);
-    const seeAll = [...main.querySelectorAll("a")].find((a) => a.textContent.toLowerCase().includes("see all policies"));
-    if (seeAll) {
-      const p = document.createElement("p");
-      const a = document.createElement("a");
-      a.href = seeAll.href;
-      a.textContent = seeAll.textContent.trim();
-      p.appendChild(a);
-      sectionDiv.appendChild(p);
-    }
-    if (complementary) {
-      complementary.replaceWith(sectionDiv);
-    } else if (heading) {
-      heading.replaceWith(sectionDiv);
-    }
   }
   var import_esg_environment_default = {
     transform: (payload) => {
@@ -653,14 +666,16 @@ var CustomImportScript = (() => {
         const uniqueUrls = [...new Set(Object.values(variants))];
         if (uniqueUrls.length > 1) viewportVariants.push({ alt: img ? img.alt : "", ...variants });
       });
-      extractHero(document, main);
-      extractNewsCards(document, main);
-      extractAccordions(document, main);
-      extractTabs(document, main);
-      extractCustomerStories(document, main);
-      extractKpiStats(document, main);
-      extractAgreements(document, main);
-      extractPoliciesReports(document, main);
+      const parserContext = { document, main, url, params, getAllViewportSrcs, getDesktopImgSrc };
+      const heroEl = main.querySelector(PAGE_TEMPLATE.blocks[0].instances.join(", "));
+      if (heroEl) parsers["hero"](heroEl, parserContext);
+      parsers["news-cards"](null, parserContext);
+      parsers["accordion"](null, parserContext);
+      parsers["tabs"](null, parserContext);
+      parsers["customer-stories"](null, parserContext);
+      parsers["kpi-stats"](null, parserContext);
+      parsers["agreements"](null, parserContext);
+      parsers["policies"](null, parserContext);
       executeTransformers("afterTransform", main, payload);
       main.querySelectorAll("picture").forEach((picture) => {
         const img = picture.querySelector("img");
@@ -687,7 +702,11 @@ var CustomImportScript = (() => {
       return [{
         element: main,
         path,
-        report: { title: document.title, template: "esg-environment", viewportVariants: viewportVariants.length > 0 ? JSON.stringify(viewportVariants) : void 0 }
+        report: {
+          title: document.title,
+          template: PAGE_TEMPLATE.name,
+          viewportVariants: viewportVariants.length > 0 ? JSON.stringify(viewportVariants) : void 0
+        }
       }];
     }
   };

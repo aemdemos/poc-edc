@@ -1,0 +1,142 @@
+{
+  "templates": [
+    {
+      "name": "esg-environment",
+      "description": "EDC ESG information pages (environment, social, governance, etc.) with hero, breadcrumbs, news cards, accordions, tabs, customer stories, KPIs, agreements, and policies sections.",
+      "urls": [
+        "https://www.edc.ca/en/about-us/esg/environment.html",
+        "https://www.edc.ca/en/about-us/esg/social.html",
+        "https://www.edc.ca/en/about-us/esg/esg-governance.html",
+        "https://www.edc.ca/en/about-us/esg/sustainable-finance.html",
+        "https://www.edc.ca/en/about-us/esg/risk-management.html",
+        "https://www.edc.ca/en/about-us/esg/esg-metrics.html",
+        "https://www.edc.ca/en/about-us/esg/equator-principles.html"
+      ],
+      "blocks": [
+        {
+          "name": "hero",
+          "instances": [
+            ".c-hero-banner",
+            "section[class*='hero']",
+            "[class*='herobanner']"
+          ]
+        },
+        {
+          "name": "cards",
+          "instances": [
+            ".imageinbodytext"
+          ],
+          "context": "news-cards",
+          "description": "News and Insights cards with image + h3 title + description + CTA link"
+        },
+        {
+          "name": "accordion",
+          "instances": [
+            "[role='region']"
+          ],
+          "description": "Collapsible accordion items with button title + content paragraphs"
+        },
+        {
+          "name": "tabs",
+          "instances": [
+            "[role='tablist']"
+          ],
+          "description": "Tabbed timeline content (2021-2024 milestones)"
+        },
+        {
+          "name": "cards",
+          "instances": [
+            ".c-card-slider",
+            "[class*='card-listing']"
+          ],
+          "context": "customer-stories",
+          "description": "Customer stories article cards with image + linked title + description"
+        },
+        {
+          "name": "cards",
+          "instances": [
+            "[class*='stats']"
+          ],
+          "context": "kpi-stats",
+          "description": "KPI stat cards starting with $ or % values"
+        },
+        {
+          "name": "cards",
+          "instances": [
+            ".c-product-form-card"
+          ],
+          "context": "policies",
+          "description": "Policy cards with title + description + PDF link"
+        }
+      ],
+      "sections": [
+        {
+          "id": "section-hero",
+          "name": "Hero",
+          "blocks": ["hero"]
+        },
+        {
+          "id": "section-breadcrumbs",
+          "name": "Breadcrumbs + Intro",
+          "blocks": [],
+          "defaultContent": ["breadcrumb links", "squiggle icon", "intro paragraph"]
+        },
+        {
+          "id": "section-news",
+          "name": "News and Insights",
+          "blocks": ["cards"]
+        },
+        {
+          "id": "section-feature",
+          "name": "Feature Image + Body",
+          "blocks": [],
+          "defaultContent": ["feature image", "pull quote h2", "body text", "bullet lists"]
+        },
+        {
+          "id": "section-accordion",
+          "name": "Accordion",
+          "blocks": ["accordion"]
+        },
+        {
+          "id": "section-timeline",
+          "name": "Climate Journey / Timeline",
+          "blocks": ["tabs", "accordion"]
+        },
+        {
+          "id": "section-customer-stories",
+          "name": "Customer Stories",
+          "blocks": ["cards"]
+        },
+        {
+          "id": "section-kpi",
+          "name": "By the Numbers",
+          "blocks": ["cards"]
+        },
+        {
+          "id": "section-agreements",
+          "name": "Agreements and Memberships",
+          "style": "highlight",
+          "blocks": [],
+          "defaultContent": ["heading", "body text", "learn more link"]
+        },
+        {
+          "id": "section-policies",
+          "name": "Policies & Reports",
+          "blocks": ["cards"]
+        },
+        {
+          "id": "section-continue-browsing",
+          "name": "Continue Browsing",
+          "blocks": [],
+          "defaultContent": ["continue browsing text", "breadcrumb links"]
+        },
+        {
+          "id": "section-date-modified",
+          "name": "Date Modified",
+          "blocks": [],
+          "defaultContent": ["date modified text"]
+        }
+      ]
+    }
+  ]
+}
