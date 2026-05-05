@@ -1,0 +1,8 @@
+{
+  "status": "failed",
+  "url": "https://www.edc.ca/en/about-us/esg/social.html",
+  "path": "en/about-us/esg/social.html",
+  "timestamp": "2026-05-04T20:16:51.854Z",
+  "error": "page.evaluate: Error: Failed to import page: Cannot read properties of null (reading 'innerHTML')\n    at eval (eval at evaluate (:290:30), <anonymous>:24:15)\n    at async <anonymous>:316:30",
+  "errorStack": "page.evaluate: Error: Failed to import page: Cannot read properties of null (reading 'innerHTML')\n    at eval (eval at evaluate (:290:30), <anonymous>:24:15)\n    at async <anonymous>:316:30\n    at processUrl (/home/node/.excat-marketplace/excat/skills/excat-content-import/scripts/run-bulk-import.js:297:31)\n    at async main (/home/node/.excat-marketplace/excat/skills/excat-content-import/scripts/run-bulk-import.js:459:22)"
+}
