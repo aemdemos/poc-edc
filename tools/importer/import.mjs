@@ -51,16 +51,17 @@ const MEDIA_DOWNLOADS = [
 ];
 
 /**
- * @param {string[]} classes
+ * @param {string} blockName Display name for the block header (e.g. "Hero", "Cards (horizontal)")
  * @param {string[][]} rows cell HTML per row
  */
-function blockFromRows(classes, rows) {
-  const cls = classes.filter(Boolean).join(' ');
+function blockTable(blockName, rows) {
+  const colCount = Math.max(...rows.map((r) => r.length), 1);
+  const colSpan = colCount > 1 ? ` colspan="${colCount}"` : '';
   const body = rows.map((cols) => `
-    <div>
-      ${cols.map((html) => `<div>${html}</div>`).join('')}
-    </div>`).join('');
-  return `<div class="${cls}">${body}</div>`;
+      <tr>${cols.map((html) => `<td>${html}</td>`).join('')}</tr>`).join('');
+  return `<table>
+      <tr><th${colSpan}>${blockName}</th></tr>${body}
+    </table>`;
 }
 
 /**
@@ -98,24 +99,28 @@ function extractArticleSegments(doc) {
   return segments;
 }
 
-function breadcrumbHtml(doc) {
+
+function extractBreadcrumbs(doc) {
   const nav = doc.querySelector('nav[aria-label="Breadcrumb"]');
   if (!nav) return '';
-  const clone = nav.cloneNode(true);
-  clone.querySelectorAll('script').forEach((s) => s.remove());
-  clone.classList.add('breadcrumb-nav');
-  const ol = clone.querySelector('ol');
-  if (ol) ol.classList.add('breadcrumb-list');
-  return clone.outerHTML;
+  const items = [...nav.querySelectorAll('li')];
+  if (!items.length) return '';
+  const listItems = items.map((li) => {
+    const a = li.querySelector('a');
+    if (a) return `<li><a href="${a.getAttribute('href')}">${a.textContent.trim()}</a></li>`;
+    return `<li>${li.textContent.trim()}</li>`;
+  }).join('\n      ');
+  return `<ul>
+      ${listItems}
+    </ul>`;
 }
 
-function sectionMetaRows(meta) {
+function sectionMetaTable(meta) {
   const rows = Object.entries(meta).map(([k, v]) => `
-    <div>
-      <div>${k}</div>
-      <div><p>${String(v)}</p></div>
-    </div>`).join('');
-  return `<div class="section-metadata">${rows}</div>`;
+      <tr><td>${k}</td><td>${String(v)}</td></tr>`).join('');
+  return `<table>
+      <tr><th colspan="2">Section metadata</th></tr>${rows}
+    </table>`;
 }
 
 function replaceMediaRefs(html) {
@@ -189,7 +194,7 @@ async function run() {
   const quoteData = parseQuote(document);
   const cardsData = parseRelated(document);
 
-  const bcHtml = breadcrumbHtml(document);
+  const breadcrumbs = extractBreadcrumbs(document);
   const segments = extractArticleSegments(document);
 
   const metaDesc = document.querySelector('meta[name="description"]')?.getAttribute('content') || '';
@@ -201,18 +206,13 @@ async function run() {
   heroInner = replaceMediaRefs(heroInner);
   heroInner = heroInner.replace(/<picture[\s\S]*?<\/picture>/i, heroPictureMarkup(heroAlt));
 
-  const heroBlock = blockFromRows(['hero', 'block'], [[heroInner]]);
+  const heroBlock = blockTable('Hero', [[heroInner]]);
+  const quoteBlock = blockTable('Quote', quoteData.cells);
+  const cardsBlock = replaceMediaRefs(blockTable('Cards (horizontal)', cardsData.cells));
+  const sidebarBlock = blockTable('Sidebar', sidebarData.cells);
 
-  const quoteBlock = blockFromRows(['quote', 'block'], quoteData.cells);
-
-  const cardsBlock = replaceMediaRefs(
-    blockFromRows(['cards', 'horizontal', 'block'], cardsData.cells),
-  );
-
-  const sidebarBlock = blockFromRows(['sidebar', 'block'], sidebarData.cells);
-
-  const newsletterRows = newsletterData.cells.map(([c]) => [`<p>${escapeHtmlTableCell(c)}</p>`]);
-  const newsletterBlock = blockFromRows(['newsletter', 'block'], newsletterRows);
+  const newsletterRows = newsletterData.cells.map(([c]) => [`<p>${c}</p>`]);
+  const newsletterBlock = blockTable('Newsletter', newsletterRows);
 
   let articleParts = '';
   segments.forEach((seg) => {
@@ -232,31 +232,30 @@ async function run() {
   const pageTitle = document.querySelector('title')?.textContent?.replace(/\s*\|\s*EDC\s*$/i, '')?.trim()
     || 'ECBVerdyol foreign exchange challenge';
 
-  const page = `<main>
+  const page = `<header></header>
+<main>
   <div>
     ${heroBlock}
-    ${sectionMetaRows({ style: 'hero' })}
+    ${sectionMetaTable({ style: 'hero' })}
   </div>
-  <hr/>
+  <hr>
   <div>
-    ${bcHtml}
-    <div class="case-study-grid">
-      <div class="default-content-wrapper case-study-main">
-        ${articleParts}
-      </div>
-      <aside class="case-study-rail">
-        ${sidebarBlock}
-      </aside>
-    </div>
-    <p class="date-modified">${dateText}</p>
-    ${sectionMetaRows({ style: 'article' })}
+    ${breadcrumbs}
+    ${sectionMetaTable({ style: 'breadcrumb' })}
   </div>
-  <hr/>
+  <hr>
+  <div>
+    ${articleParts}
+    ${sidebarBlock}
+    <p>${dateText}</p>
+    ${sectionMetaTable({ style: 'article' })}
+  </div>
+  <hr>
   <div>
     ${newsletterBlock}
-    ${sectionMetaRows({ style: 'highlight', 'background-color': '#E5EDF7' })}
+    ${sectionMetaTable({ style: 'highlight', 'background-color': '#E5EDF7' })}
   </div>
-  <hr/>
+  <hr>
   <div>
     <table>
       <tr><th colspan="2">Metadata</th></tr>
@@ -269,12 +268,12 @@ async function run() {
     </table>
   </div>
 </main>
+<footer></footer>
 `;
 
   await fs.mkdir(path.dirname(OUTPUT_HTML), { recursive: true });
   await downloadMedia();
   await fs.writeFile(OUTPUT_HTML, page, 'utf8');
-  // eslint-disable-next-line no-console
   console.warn(`Wrote ${path.relative(REPO_ROOT, OUTPUT_HTML)}`);
 }
 
