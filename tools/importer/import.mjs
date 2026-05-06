@@ -1,8 +1,5 @@
-#!/usr/bin/env node
-/**
- * One-shot importer: fetch edc.ca case study HTML, extract blocks, emit EDS fragment + media.
- * Raster files under content/**/media/ are gitignored (icons remain under icons/).
- */
+/* eslint-disable no-console */
+/* One-shot importer: fetch edc.ca case study HTML, extract blocks, emit EDS fragment + media. */
 
 import fs from 'fs/promises';
 import path from 'path';

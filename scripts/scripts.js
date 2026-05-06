@@ -359,7 +359,30 @@ export function decorateSections(main) {
  * @param {Element} main The main element
  */
 // eslint-disable-next-line import/prefer-default-export
+function consumeMetadataTable(main) {
+  const table = main.querySelector(':scope > div:last-child table');
+  if (!table) return;
+  const header = table.querySelector('th');
+  if (!header || header.textContent.trim().toLowerCase() !== 'metadata') return;
+  table.querySelectorAll('tr').forEach((row) => {
+    const cells = row.querySelectorAll('td');
+    if (cells.length === 2) {
+      const name = cells[0].textContent.trim();
+      const content = cells[1].textContent.trim();
+      if (name && !document.querySelector(`meta[name="${name}"]`)) {
+        const meta = document.createElement('meta');
+        meta.name = name;
+        meta.content = content;
+        document.head.appendChild(meta);
+      }
+    }
+  });
+  const section = table.closest('div');
+  if (section && section.parentElement === main) section.remove();
+}
+
 export function decorateMain(main) {
+  consumeMetadataTable(main);
   // hopefully forward compatible button decoration
   decorateIcons(main);
   buildAutoBlocks(main);
@@ -502,8 +525,10 @@ async function loadLazy(doc) {
   const element = hash ? doc.getElementById(hash.substring(1)) : false;
   if (hash && element) element.scrollIntoView();
 
-  loadHeader(doc.querySelector('header'));
-  loadFooter(doc.querySelector('footer'));
+  const header = doc.querySelector('header');
+  if (header) loadHeader(header);
+  const footer = doc.querySelector('footer');
+  if (footer) loadFooter(footer);
 
   loadCSS(`${window.hlx.codeBasePath}/styles/lazy-styles.css`);
   loadFonts();

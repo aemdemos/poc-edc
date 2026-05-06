@@ -1,0 +1,29 @@
+main .case-study-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+main .case-study-grid .case-study-main {
+  flex: 1;
+}
+
+main .case-study-grid .case-study-rail {
+  width: 100%;
+}
+
+@media (width >= 900px) {
+  main .case-study-grid {
+    flex-direction: row;
+    gap: 3rem;
+  }
+
+  main .case-study-grid .case-study-main {
+    flex: 2;
+  }
+
+  main .case-study-grid .case-study-rail {
+    flex: 1;
+    max-width: 300px;
+  }
+}
