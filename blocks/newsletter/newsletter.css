@@ -1,60 +1,88 @@
 main .newsletter {
-  padding: 64px 24px 32px;
+  margin: 0;
 }
 
 main .newsletter .newsletter-inner {
+  box-sizing: border-box;
   max-width: var(--max-width-site);
   margin: 0 auto;
+  padding: 64px 24px 32px;
 }
 
 main .newsletter .newsletter-heading {
-  margin-bottom: 1.25rem;
+  margin: 0 0 1.25rem;
+  font-size: var(--heading-font-size-l);
+  font-weight: 700;
+  text-align: center;
+  color: var(--dark-color);
 }
 
-main .newsletter .newsletter-heading h2 {
+main .newsletter .newsletter-form {
   margin: 0;
-  font-size: var(--heading-font-size-xl);
-  font-weight: 700;
-  color: var(--dark-color);
 }
 
 main .newsletter .newsletter-controls {
   display: flex;
-  flex-wrap: wrap;
-  margin-bottom: 1rem;
+  flex-direction: column;
+  gap: 0;
+  max-width: 42rem;
+  margin: 0 auto 1rem;
+}
+
+@media (width >= 600px) {
+  main .newsletter .newsletter-controls {
+    flex-direction: row;
+    align-items: stretch;
+  }
 }
 
 main .newsletter .newsletter-input {
-  flex: 1 1 200px;
-  min-width: 0;
+  flex: 1;
   margin: 0;
-  border: 1px solid rgb(180 180 180);
-  border-right: none;
-  border-radius: var(--button-border-radius, 8px) 0 0 var(--button-border-radius, 8px);
-  padding: 0.75rem 1rem;
+  border: 1px solid rgb(0 0 0 / 15%);
+  border-radius: var(--button-border-radius) 0 0 var(--button-border-radius);
+  padding: 0.85rem 1rem;
   font-size: var(--body-font-size-m);
-  background-color: var(--background-color);
+  background: var(--background-color);
 }
 
 main .newsletter .newsletter-submit {
   margin: 0;
-  border-radius: 0 var(--button-border-radius, 8px) var(--button-border-radius, 8px) 0;
-  padding: 0.75rem 1.25rem;
+  border: none;
+  border-radius: 0 var(--button-border-radius) var(--button-border-radius) 0;
+  padding: 0.85rem 1.5rem;
+  font-size: var(--body-font-size-m);
+  font-weight: 600;
   white-space: nowrap;
+  background-color: var(--link-color);
+  color: var(--background-color);
+  cursor: pointer;
+}
+
+main .newsletter .newsletter-submit:hover,
+main .newsletter .newsletter-submit:focus {
+  background-color: var(--link-hover-color);
+}
+
+@media (width < 600px) {
+  main .newsletter .newsletter-input {
+    border-radius: var(--button-border-radius) var(--button-border-radius) 0 0;
+  }
+
+  main .newsletter .newsletter-submit {
+    border-radius: 0 0 var(--button-border-radius) var(--button-border-radius);
+  }
 }
 
 main .newsletter .newsletter-disclaimer {
+  max-width: 42rem;
+  margin: 0 auto;
   font-size: var(--body-font-size-s);
-  line-height: 1.45;
+  line-height: 1.5;
+  text-align: center;
+  color: var(--text-color);
 }
 
 main .newsletter .newsletter-disclaimer p {
   margin: 0;
-}
-
-@media (width >= 900px) {
-  main .newsletter .newsletter-controls {
-    flex-wrap: nowrap;
-    max-width: 720px;
-  }
 }

@@ -3,6 +3,7 @@ import {
   loadFooter,
   decorateIcons,
   decorateBlocks,
+  decorateBlock,
   decorateTemplateAndTheme,
   getMetadata,
   waitForFirstImage,
@@ -364,6 +365,11 @@ export function decorateMain(main) {
   buildAutoBlocks(main);
   decorateSections(main);
   decorateBlocks(main);
+  // Blocks nested inside layout wrappers (e.g. case-study grid) are not section > wrapper > block;
+  // decorate them so dataset.blockName is set before loadSections runs in loadLazy().
+  main.querySelectorAll('.section div.block').forEach((block) => {
+    if (!block.dataset.blockStatus) decorateBlock(block);
+  });
   decorateButtons(main);
   a11yLinks(main);
 }

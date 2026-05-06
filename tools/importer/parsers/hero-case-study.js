@@ -1,32 +1,44 @@
-const SOURCE_BASE = 'https://www.edc.ca';
+import { resolveUrl } from '../utils/dom-utils.js';
 
 /**
  * @param {Document} document
  * @returns {{ blockName: string, cells: string[][] }}
  */
 export function parse(document) {
-  const hero = document.querySelector('section.c-page-hero-banner, section[role="banner"]');
-  const imgWrap = hero?.querySelector('.img-wrapper picture, picture');
-  const h1 = hero?.querySelector('h1');
-  const subtitle = hero?.querySelector('.content .title + p') || hero?.querySelector('.content p');
+  const banner = document.querySelector('section.c-page-hero-banner, section[role="banner"]');
+  const picture = banner?.querySelector('.img-wrapper picture, picture');
+  const h1 = banner?.querySelector('h1.title, h1');
+  const subtitle = banner?.querySelector('.content p');
 
+  const base = 'https://www.edc.ca/';
   let pictureHtml = '';
-  if (imgWrap) {
-    const pic = imgWrap.closest('picture') || imgWrap;
-    pictureHtml = pic.outerHTML.replace(/\ssrcSet=/gi, ' srcset=');
-    pictureHtml = pictureHtml.replace(/src="\/([^"]+)"/g, (_, p) => `src="${SOURCE_BASE}/${p}"`);
-    pictureHtml = pictureHtml.replace(/srcSet="([^"]+)"/gi, (_, raw) => {
-      const abs = raw.replace(/(^|[,\s])\/content/g, `$1${SOURCE_BASE}/content`);
-      return `srcset="${abs}"`;
+  if (picture) {
+    const clone = picture.cloneNode(true);
+    clone.querySelectorAll('source, img').forEach((el) => {
+      if (el.tagName === 'SOURCE' && el.srcSet) {
+        el.srcSet = el.srcSet.split(',').map((part) => {
+          const [url, rest] = part.trim().split(/\s+/);
+          return `${resolveUrl(base, url)} ${rest || ''}`.trim();
+        }).join(', ');
+      }
+      if (el.tagName === 'IMG' && el.src) {
+        el.src = resolveUrl(base, el.src);
+      }
     });
+    pictureHtml = clone.outerHTML;
   }
 
-  const title = h1?.textContent?.trim() || '';
-  const sub = subtitle?.textContent?.trim() || '';
-  const inner = `${pictureHtml}<h1>${title}</h1>${sub ? `<p class="hero-subtitle">${sub}</p>` : ''}`;
+  const titleText = h1?.textContent?.trim() || '';
+  const subHtml = subtitle?.textContent?.trim()
+    ? `<p class="hero-subtitle">${subtitle.textContent.trim()}</p>`
+    : '';
+
+  const cellHtml = `${pictureHtml}<h1>${titleText}</h1>${subHtml}`;
 
   return {
     blockName: 'Hero',
-    cells: [[inner]],
+    cells: [[cellHtml]],
   };
 }
+
+export default { parse };

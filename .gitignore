@@ -14,5 +14,6 @@ localhost-key.pem
 Trace*.json
 .migration/*
 
-# Raster assets from imports / CDN — not committed (icons stay under icons/)
+# Raster assets from imports / CDN — not committed (SVG/icons stay under icons/)
 images/
+content/**/media/

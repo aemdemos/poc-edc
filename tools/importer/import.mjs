@@ -1,270 +1,188 @@
 #!/usr/bin/env node
 /**
- * EDC case study page importer — fetches source HTML, downloads assets,
- * and writes Franklin-compatible content HTML.
+ * One-shot importer: fetch edc.ca case study HTML, extract blocks, emit EDS fragment + media.
+ * Raster files under content/**/media/ are gitignored (icons remain under icons/).
  */
-/* eslint-disable no-console */
 
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { JSDOM } from 'jsdom';
 
-import { transform as cleanup } from './transformers/cleanup.js';
-import { transform as sectionsTransform } from './transformers/sections.js';
-import { parse as parseNewsletter } from './parsers/newsletter.js';
+import cleanup from './transformers/cleanup.js';
+import sectionsTransform from './transformers/sections.js';
 import { parse as parseHero } from './parsers/hero-case-study.js';
 import { parse as parseSidebar } from './parsers/sidebar-company-profile.js';
 import { parse as parseQuote } from './parsers/quote-pullquote.js';
-import { parse as parseCards } from './parsers/related-services.js';
-
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+import { parse as parseRelated } from './parsers/related-services.js';
+import { parse as parseNewsletter } from './parsers/newsletter.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.resolve(__dirname, '../..');
+const REPO_ROOT = path.resolve(__dirname, '../..');
 
-const SOURCE_URL = 'https://www.edc.ca/en/about-us/what-we-do/case-studies/ecbverdyol-foreign-exchange-challenge.html';
-const SOURCE_BASE = 'https://www.edc.ca';
+const SOURCE_URL = process.env.IMPORT_SOURCE_URL
+  || 'https://www.edc.ca/en/about-us/what-we-do/case-studies/ecbverdyol-foreign-exchange-challenge.html';
 
-const IMAGE_WEB_PREFIX = '/images/case-studies/ecbverdyol-foreign-exchange-challenge';
-const OUT_REL = 'content/en/about-us/what-we-do/case-studies/ecbverdyol-foreign-exchange-challenge.html';
+const OUTPUT_HTML = path.join(
+  REPO_ROOT,
+  'content/en/about-us/what-we-do/case-studies/ecbverdyol-foreign-exchange-challenge.html',
+);
 
-/** @type {{ remotePath: string, file: string }[]} */
-const ASSETS = [
-  { remotePath: '/content/dam/edc/en/lifestyle/outdoor/ecbverdyol-foreign-exchange-challenge-ahero-d.png', file: 'hero.png' },
-  { remotePath: '/content/dam/edc/en/lifestyle/outdoor/ecbverdyol-foreign-exchange-challenge-image-1.png', file: 'image-1.png' },
-  { remotePath: '/content/dam/edc/en/lifestyle/outdoor/ecbverdyol-foreign-exchange-challenge-image-2.png', file: 'image-2.png' },
-  { remotePath: '/content/dam/edc/en/lifestyle/outdoor/ecbverdyol-foreign-exchange-challenge-image-3.png', file: 'image-3.png' },
+const MEDIA_DIR = path.join(
+  REPO_ROOT,
+  'content/en/about-us/what-we-do/case-studies/media',
+);
+
+/** Same-origin DAM paths → local filenames under ./media/ */
+const MEDIA_DOWNLOADS = [
+  {
+    remotePath: '/content/dam/edc/en/lifestyle/outdoor/ecbverdyol-foreign-exchange-challenge-ahero-m.png',
+    file: 'hero.png',
+  },
+  {
+    remotePath: '/content/dam/edc/en/lifestyle/outdoor/ecbverdyol-foreign-exchange-challenge-image-1.png',
+    file: 'image-1.png',
+  },
+  {
+    remotePath: '/content/dam/edc/en/lifestyle/outdoor/ecbverdyol-foreign-exchange-challenge-image-2.png',
+    file: 'image-2.png',
+  },
+  {
+    remotePath: '/content/dam/edc/en/lifestyle/outdoor/ecbverdyol-foreign-exchange-challenge-image-3.png',
+    file: 'image-3.png',
+  },
 ];
 
 /**
- * @param {string} blockClass
- * @param {string[][]} cells
+ * @param {string[]} classes
+ * @param {string[][]} rows cell HTML per row
  */
-function cellsToBlock(blockClass, cells) {
-  let html = `<div class="${blockClass}">`;
-  cells.forEach((row) => {
-    html += '<div>';
-    row.forEach((cell) => {
-      html += `<div>${cell}</div>`;
-    });
-    html += '</div>';
-  });
-  html += '</div>';
-  return html;
-}
-
-/**
- * @param {Record<string, string>} meta
- */
-function sectionMetaHtml(meta) {
-  const entries = Object.entries(meta).filter(([, v]) => v != null && String(v) !== '');
-  if (!entries.length) return '';
-  let inner = '';
-  entries.forEach(([k, v]) => {
-    inner += `<div><div>${k}</div><div><p>${String(v)}</p></div></div>`;
-  });
-  return `<div class="section-metadata">${inner}</div>`;
-}
-
-/**
- * @param {string} html
- * @param {Map<string, string>} urlToLocal
- */
-function rewriteImageUrls(html, urlToLocal) {
-  let out = html;
-  urlToLocal.forEach((local, absolute) => {
-    out = out.split(absolute).join(local);
-    const absEncoded = absolute.replace(/&/g, '&amp;');
-    out = out.split(absEncoded).join(local);
-  });
-  return out;
-}
-
-/**
- * Absolutize links starting with / inside HTML fragment.
- * @param {string} html
- */
-function absolutizeEdcLinks(html) {
-  return html.replace(/href="\/([^"]*)"/g, (_, p) => `href="${SOURCE_BASE}/${p}"`);
+function blockFromRows(classes, rows) {
+  const cls = classes.filter(Boolean).join(' ');
+  const body = rows.map((cols) => `
+    <div>
+      ${cols.map((html) => `<div>${html}</div>`).join('')}
+    </div>`).join('');
+  return `<div class="${cls}">${body}</div>`;
 }
 
 /**
  * @param {Document} doc
- * @param {Map<string, string>} urlToLocal
  */
-function extractArticleHtml(doc, urlToLocal) {
+function extractArticleSegments(doc) {
   const body = doc.querySelector('.article-body');
   if (!body) return [];
+  /** @type {{ type: string, html?: string }[]} */
+  const segments = [];
 
-  const chunks = [];
   [...body.children].forEach((child) => {
-    if (child.matches('.pdfdownload')) return;
-    if (child.querySelector('.recommended-articles-premium-wrapper')) {
-      chunks.push({ type: 'marker', marker: 'cards' });
+    if (child.classList.contains('pdfdownload')) return;
+    if (child.querySelector?.('.c-pdf-download.for-mobile')) return;
+    if (child.classList.contains('pullquote')) {
+      segments.push({ type: 'quote' });
       return;
     }
-    if (child.matches('.pullquote')) {
-      chunks.push({ type: 'marker', marker: 'quote' });
+    if (child.classList.contains('list') && child.querySelector('.recommended-articles-premium-wrapper')) {
+      segments.push({ type: 'cards' });
       return;
     }
-    if (child.matches('.sectiontitle')) return;
-
-    if (child.matches('.text')) {
+    if (child.classList.contains('sectiontitle')) return;
+    if (child.classList.contains('text')) {
       const cmp = child.querySelector('.cmp-text');
-      if (cmp && cmp.textContent.trim()) {
-        let inner = cmp.innerHTML;
-        inner = absolutizeEdcLinks(inner);
-        inner = rewriteImageUrls(inner, urlToLocal);
-        chunks.push({ type: 'html', html: inner });
-      }
+      if (cmp) segments.push({ type: 'html', html: cmp.innerHTML });
       return;
     }
-
-    if (child.matches('.imageinbodytext')) {
+    if (child.classList.contains('imageinbodytext')) {
       const pic = child.querySelector('picture');
-      if (pic) {
-        let ph = pic.outerHTML.replace(/\ssrcSet=/gi, ' srcset=');
-        ph = ph.replace(/src="\/([^"]+)"/g, (_, p) => `src="${SOURCE_BASE}/${p}"`);
-        ph = ph.replace(/srcset="([^"]+)"/gi, (match, raw) => {
-          const abs = raw.replace(/(^|[,\s])\/content/g, `$1${SOURCE_BASE}/content`);
-          return `srcset="${abs}"`;
-        });
-        ph = rewriteImageUrls(ph, urlToLocal);
-        chunks.push({ type: 'html', html: ph });
-      }
+      if (pic) segments.push({ type: 'html', html: pic.outerHTML });
     }
   });
 
-  return chunks;
+  return segments;
 }
 
-function buildDocument({
-  pageTitle,
-  metaDesc,
-  heroData,
-  sidebarData,
-  quoteData,
-  cardsData,
-  newsletterData,
-  articleChunks,
-  urlToLocal,
-  dateModified,
-}) {
-  const heroHtml = rewriteImageUrls(
-    cellsToBlock('hero', heroData.cells),
-    urlToLocal,
-  );
+function breadcrumbHtml(doc) {
+  const nav = doc.querySelector('nav[aria-label="Breadcrumb"]');
+  if (!nav) return '';
+  const clone = nav.cloneNode(true);
+  clone.querySelectorAll('script').forEach((s) => s.remove());
+  clone.classList.add('breadcrumb-nav');
+  const ol = clone.querySelector('ol');
+  if (ol) ol.classList.add('breadcrumb-list');
+  return clone.outerHTML;
+}
 
-  const quoteHtml = cellsToBlock('quote', quoteData.cells);
-  const cardsHtml = rewriteImageUrls(
-    cellsToBlock('cards horizontal', cardsData.cells),
-    urlToLocal,
-  );
-  const sidebarHtml = cellsToBlock('sidebar', sidebarData.cells);
-  const newsletterHtml = cellsToBlock('newsletter', newsletterData.cells);
+function sectionMetaRows(meta) {
+  const rows = Object.entries(meta).map(([k, v]) => `
+    <div>
+      <div>${k}</div>
+      <div><p>${String(v)}</p></div>
+    </div>`).join('');
+  return `<div class="section-metadata">${rows}</div>`;
+}
 
-  const breadcrumbNav = `
-<nav aria-label="Breadcrumb" class="breadcrumb-nav">
-  <ol class="breadcrumb-list">
-    <li><a href="${SOURCE_BASE}/en/about-us/what-we-do/case-studies.html">Case studies</a></li>
-    <li><a href="${SOURCE_URL}" aria-current="page">ECBVerdyol</a></li>
-  </ol>
-</nav>`;
-
-  let articleInner = breadcrumbNav;
-  articleChunks.forEach((ch) => {
-    if (ch.type === 'html') {
-      articleInner += ch.html;
-    } else if (ch.type === 'marker' && ch.marker === 'quote') {
-      articleInner += quoteHtml;
-    } else if (ch.type === 'marker' && ch.marker === 'cards') {
-      articleInner += cardsHtml;
-    }
+function replaceMediaRefs(html) {
+  let out = html;
+  const reps = [
+    [/https:\/\/www\.edc\.ca\/content\/dam\/edc\/en\/lifestyle\/outdoor\/ecbverdyol-foreign-exchange-challenge-ahero-[dmt]\.png/g, './media/hero.png'],
+    [/https:\/\/www\.edc\.ca\/content\/dam\/edc\/en\/lifestyle\/outdoor\/ecbverdyol-foreign-exchange-challenge-image-1\.png/g, './media/image-1.png'],
+    [/https:\/\/www\.edc\.ca\/content\/dam\/edc\/en\/lifestyle\/outdoor\/ecbverdyol-foreign-exchange-challenge-image-2\.png/g, './media/image-2.png'],
+    [/https:\/\/www\.edc\.ca\/content\/dam\/edc\/en\/lifestyle\/outdoor\/ecbverdyol-foreign-exchange-challenge-image-3\.png/g, './media/image-3.png'],
+    [/\/content\/dam\/edc\/en\/lifestyle\/outdoor\/ecbverdyol-foreign-exchange-challenge-ahero-[dmt]\.png/g, './media/hero.png'],
+    [/\/content\/dam\/edc\/en\/lifestyle\/outdoor\/ecbverdyol-foreign-exchange-challenge-image-1\.png/g, './media/image-1.png'],
+    [/\/content\/dam\/edc\/en\/lifestyle\/outdoor\/ecbverdyol-foreign-exchange-challenge-image-2\.png/g, './media/image-2.png'],
+    [/\/content\/dam\/edc\/en\/lifestyle\/outdoor\/ecbverdyol-foreign-exchange-challenge-image-3\.png/g, './media/image-3.png'],
+  ];
+  reps.forEach(([re, to]) => {
+    out = out.replace(re, to);
   });
-
-  const mainArticle = `
-    <div class="case-study-grid">
-      <div class="case-study-main">
-        ${articleInner}
-      </div>
-      <div class="case-study-rail">
-        ${sidebarHtml}
-      </div>
-    </div>`;
-
-  const metadataBlock = `
-<div>
-  <table>
-    <tr><th colspan="2">Metadata</th></tr>
-    <tr><td>title</td><td>${pageTitle.replace(/</g, '')}</td></tr>
-    <tr><td>description</td><td>${metaDesc.replace(/</g, '')}</td></tr>
-    <tr><td>image</td><td>${IMAGE_WEB_PREFIX}/hero.png</td></tr>
-    <tr><td>date-modified</td><td>${dateModified}</td></tr>
-    <tr><td>template</td><td>case-study</td></tr>
-  </table>
-</div>`;
-
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8"/>
-  <title>${pageTitle.replace(/</g, '')}</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <meta name="description" content="${metaDesc.replace(/"/g, '&quot;')}"/>
-  <meta name="template" content="case-study"/>
-  <meta name="date-modified" content="${dateModified}"/>
-</head>
-<body>
-  <header></header>
-  <main>
-    <div>
-      ${heroHtml}
-      ${sectionMetaHtml({ style: 'hero' })}
-    </div>
-    <hr/>
-    <div>
-      ${mainArticle}
-      <p class="date-modified">Date modified: ${dateModified}</p>
-      ${sectionMetaHtml({ style: 'article' })}
-    </div>
-    <hr/>
-    <div>
-      ${newsletterHtml}
-      ${sectionMetaHtml({ style: 'highlight', 'background-color': '#E5EDF7' })}
-    </div>
-    <hr/>
-    ${metadataBlock}
-  </main>
-  <footer></footer>
-</body>
-</html>`;
+  return out;
 }
 
-async function downloadFile(url, dest) {
+async function fetchBuffer(url) {
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
   const res = await fetch(url);
-  if (!res.ok) throw new Error(`Failed to fetch ${url}: ${res.status}`);
-  const buf = Buffer.from(await res.arrayBuffer());
-  await fs.mkdir(path.dirname(dest), { recursive: true });
-  await fs.writeFile(dest, buf);
+  if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
+  return Buffer.from(await res.arrayBuffer());
 }
 
-async function main() {
+async function downloadMedia() {
+  await fs.mkdir(MEDIA_DIR, { recursive: true });
+  const base = new URL(SOURCE_URL).origin;
+  // eslint-disable-next-line no-restricted-syntax
+  for (const { remotePath, file } of MEDIA_DOWNLOADS) {
+    const url = `${base}${remotePath}`;
+    const dest = path.join(MEDIA_DIR, file);
+    const buf = await fetchBuffer(url);
+    await fs.writeFile(dest, buf);
+    // eslint-disable-next-line no-console
+    console.warn(`Wrote ${path.relative(REPO_ROOT, dest)} (${buf.length} bytes)`);
+  }
+}
+
+function escapeHtmlTableCell(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function heroPictureMarkup(altText) {
+  const alt = escapeHtmlTableCell(altText);
+  return `<picture><img src="./media/hero.png" alt="${alt}" loading="eager"/></picture>`;
+}
+
+async function run() {
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
   const res = await fetch(SOURCE_URL);
-  if (!res.ok) throw new Error(`Failed to fetch page: ${res.status}`);
-  const html = await res.text();
-  const dom = new JSDOM(html, { url: SOURCE_URL });
+  if (!res.ok) throw new Error(`Fetch failed ${res.status}`);
+  const rawHtml = await res.text();
+
+  const dom = new JSDOM(rawHtml, { url: SOURCE_URL });
   const { document } = dom.window;
 
   const newsletterData = parseNewsletter(document);
-  const metaDesc = document.querySelector('meta[name="description"]')?.getAttribute('content') || '';
-  const pageTitle = document.querySelector('title')?.textContent?.trim() || '';
-
-  let dateModified = '2024-09-05';
-  const dm = document.querySelector('.c-date-modified__date, .c-date-modified');
-  const dmText = dm?.textContent?.trim() || '';
-  const m = dmText.match(/(\d{4}-\d{2}-\d{2})/);
-  if (m) [, dateModified] = m;
 
   cleanup(document);
   sectionsTransform(document);
@@ -272,46 +190,99 @@ async function main() {
   const heroData = parseHero(document);
   const sidebarData = parseSidebar(document);
   const quoteData = parseQuote(document);
-  const cardsData = parseCards(document);
+  const cardsData = parseRelated(document);
 
-  const urlToLocal = new Map();
-  ASSETS.forEach((a) => {
-    const absolute = SOURCE_BASE + a.remotePath;
-    urlToLocal.set(absolute, `${IMAGE_WEB_PREFIX}/${a.file}`);
+  const bcHtml = breadcrumbHtml(document);
+  const segments = extractArticleSegments(document);
+
+  const metaDesc = document.querySelector('meta[name="description"]')?.getAttribute('content') || '';
+
+  const heroAlt = document.querySelector('section.c-page-hero-banner img')?.getAttribute('alt')
+    || 'Landscape showing use of erosion and sediment control';
+
+  let heroInner = heroData.cells[0]?.[0] || '';
+  heroInner = replaceMediaRefs(heroInner);
+  heroInner = heroInner.replace(/<picture[\s\S]*?<\/picture>/i, heroPictureMarkup(heroAlt));
+
+  const heroBlock = blockFromRows(['hero', 'block'], [[heroInner]]);
+
+  const quoteBlock = blockFromRows(['quote', 'block'], quoteData.cells);
+
+  const cardsBlock = replaceMediaRefs(
+    blockFromRows(['cards', 'horizontal', 'block'], cardsData.cells),
+  );
+
+  const sidebarBlock = blockFromRows(['sidebar', 'block'], sidebarData.cells);
+
+  const newsletterRows = newsletterData.cells.map(([c]) => [`<p>${escapeHtmlTableCell(c)}</p>`]);
+  const newsletterBlock = blockFromRows(['newsletter', 'block'], newsletterRows);
+
+  let articleParts = '';
+  segments.forEach((seg) => {
+    if (seg.type === 'html' && seg.html) {
+      articleParts += replaceMediaRefs(seg.html);
+    } else if (seg.type === 'quote') {
+      articleParts += quoteBlock;
+    } else if (seg.type === 'cards') {
+      articleParts += cardsBlock;
+    }
   });
-  const heroBase = '/content/dam/edc/en/lifestyle/outdoor/ecbverdyol-foreign-exchange-challenge-ahero';
-  ['-d.png', '-t.png', '-m.png'].forEach((suf) => {
-    urlToLocal.set(`${SOURCE_BASE}${heroBase}${suf}`, `${IMAGE_WEB_PREFIX}/hero.png`);
-  });
 
-  const imageDir = path.join(ROOT, IMAGE_WEB_PREFIX.replace(/^\//, ''));
-  await Promise.all(ASSETS.map((a) => downloadFile(
-    SOURCE_BASE + a.remotePath,
-    path.join(imageDir, a.file),
-  )));
+  const dateText = document.querySelector('.c-date-modified__date')?.textContent?.trim()
+    || 'Date modified: 2024-09-05';
+  const dateMatch = dateText.match(/(\d{4}-\d{2}-\d{2})/);
+  const dateIso = dateMatch ? dateMatch[1] : '2024-09-05';
+  const pageTitle = document.querySelector('title')?.textContent?.replace(/\s*\|\s*EDC\s*$/i, '')?.trim()
+    || 'ECBVerdyol foreign exchange challenge';
 
-  const articleChunks = extractArticleHtml(document, urlToLocal);
+  const page = `<main>
+  <div>
+    ${heroBlock}
+    ${sectionMetaRows({ style: 'hero' })}
+  </div>
+  <hr/>
+  <div>
+    ${bcHtml}
+    <div class="case-study-grid">
+      <div class="default-content-wrapper case-study-main">
+        ${articleParts}
+      </div>
+      <aside class="case-study-rail">
+        ${sidebarBlock}
+      </aside>
+    </div>
+    <p class="date-modified">${dateText}</p>
+    ${sectionMetaRows({ style: 'article' })}
+  </div>
+  <hr/>
+  <div>
+    ${newsletterBlock}
+    ${sectionMetaRows({ style: 'highlight', 'background-color': '#E5EDF7' })}
+  </div>
+  <hr/>
+  <div>
+    <table>
+      <tr><th colspan="2">Metadata</th></tr>
+      <tr><td>title</td><td>${escapeHtmlTableCell(pageTitle)}</td></tr>
+      <tr><td>description</td><td>${escapeHtmlTableCell(metaDesc)}</td></tr>
+      <tr><td>image</td><td>./media/hero.png</td></tr>
+      <tr><td>date-modified</td><td>${dateIso}</td></tr>
+      <tr><td>template</td><td>case-study</td></tr>
+      <tr><td>breadcrumbs</td><td>true</td></tr>
+    </table>
+  </div>
+</main>
+`;
 
-  const outHtml = buildDocument({
-    pageTitle,
-    metaDesc,
-    heroData,
-    sidebarData,
-    quoteData,
-    cardsData,
-    newsletterData,
-    articleChunks,
-    urlToLocal,
-    dateModified,
-  });
-
-  const outPath = path.join(ROOT, OUT_REL);
-  await fs.mkdir(path.dirname(outPath), { recursive: true });
-  await fs.writeFile(outPath, outHtml, 'utf8');
-  console.log(`Wrote ${outPath}`);
+  await fs.mkdir(path.dirname(OUTPUT_HTML), { recursive: true });
+  await downloadMedia();
+  await fs.writeFile(OUTPUT_HTML, page, 'utf8');
+  // eslint-disable-next-line no-console
+  console.warn(`Wrote ${path.relative(REPO_ROOT, OUTPUT_HTML)}`);
 }
 
-main().catch((err) => {
+run().catch((err) => {
+  // eslint-disable-next-line no-console
   console.error(err);
   process.exit(1);
 });

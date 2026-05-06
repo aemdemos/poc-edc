@@ -23,8 +23,8 @@
   --overlay-background-color: #ccc;
 
   /* fonts */
-  --body-font-family: "noto sans", -apple-system, blinkmacsystemfont, "Segoe UI", "Helvetica Neue", sans-serif;
-  --heading-font-family: "noto sans", -apple-system, blinkmacsystemfont, "Segoe UI", "Helvetica Neue", sans-serif;
+  --body-font-family: "Noto Sans", -apple-system, blinkmacsystemfont, "Segoe UI", "Helvetica Neue", sans-serif;
+  --heading-font-family: "Noto Sans", -apple-system, blinkmacsystemfont, "Segoe UI", "Helvetica Neue", sans-serif;
 
   /* body sizes */
   --body-font-size-m: 16px;
@@ -327,6 +327,19 @@ main .case-study-grid {
   main .case-study-rail {
     order: unset;
   }
+}
+
+main .case-study-rail {
+  box-sizing: border-box;
+  padding: 1.5rem;
+  border-radius: 4px;
+  background-color: var(--light-color);
+}
+
+main .case-study-main picture img {
+  display: block;
+  width: 100%;
+  height: auto;
 }
 
 main .case-study-main :is(h2, h3) + p,

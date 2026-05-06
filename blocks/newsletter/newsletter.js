@@ -2,69 +2,64 @@ import { getBlockId, ensureDOMPurify } from '../../scripts/scripts.js';
 import { DOMPURIFY } from '../../scripts/aem.js';
 
 /**
- * Newsletter signup block (heading, disclaimer, joined email + button).
- * Row 1: heading HTML. Row 2: disclaimer HTML. Row 3: placeholder text | button label.
+ * Newsletter signup strip (heading + disclaimer + email field UI).
+ * Form posts externally on source site; here we provide accessible UI only.
  * @param {Element} block
  */
 export default async function decorate(block) {
   const blockId = getBlockId('newsletter');
   block.setAttribute('id', blockId);
-  block.setAttribute('aria-label', `Newsletter ${blockId}`);
+  block.setAttribute('aria-label', `Newsletter signup ${blockId}`);
   block.setAttribute('role', 'region');
 
-  const rows = [...block.children];
-  const headingCell = rows[0]?.firstElementChild;
-  const disclaimerCell = rows[1]?.firstElementChild;
-  const row3 = rows[2];
-  const placeholderCell = row3?.children[0];
-  const buttonCell = row3?.children[1];
+  const rows = [...block.children].filter((r) => r.tagName === 'DIV');
+  const headingHtml = rows[0]?.firstElementChild?.innerHTML || rows[0]?.innerHTML || '';
+  const disclaimerHtml = rows[1]?.firstElementChild?.innerHTML || rows[1]?.innerHTML || '';
 
-  await ensureDOMPurify();
-  const placeholder = placeholderCell?.textContent?.trim() || '';
-  const buttonLabel = buttonCell?.textContent?.trim() || '';
+  block.textContent = '';
+
+  const inner = document.createElement('div');
+  inner.className = 'newsletter-inner';
+
+  const heading = document.createElement('div');
+  heading.className = 'newsletter-heading';
 
   const form = document.createElement('form');
   form.className = 'newsletter-form';
   form.setAttribute('action', '#');
   form.setAttribute('method', 'post');
 
-  const inner = document.createElement('div');
-  inner.className = 'newsletter-inner';
-
-  if (headingCell) {
-    const headWrap = document.createElement('div');
-    headWrap.className = 'newsletter-heading';
-    headWrap.innerHTML = window.DOMPurify.sanitize(headingCell.innerHTML, DOMPURIFY);
-    inner.append(headWrap);
-  }
-
-  const controls = document.createElement('div');
-  controls.className = 'newsletter-controls';
+  const wrap = document.createElement('div');
+  wrap.className = 'newsletter-controls';
 
   const input = document.createElement('input');
   input.type = 'email';
-  input.name = 'email';
-  input.className = 'newsletter-input';
-  input.placeholder = placeholder;
-  input.setAttribute('aria-label', placeholder);
+  input.name = 'emailAddress';
+  input.autocomplete = 'email';
+  input.placeholder = 'Business email address';
+  input.setAttribute('aria-label', 'Business email address');
   input.required = true;
+  input.className = 'newsletter-input';
 
   const btn = document.createElement('button');
   btn.type = 'submit';
   btn.className = 'newsletter-submit';
-  btn.textContent = buttonLabel;
+  btn.textContent = 'Subscribe';
 
-  controls.append(input, btn);
-  inner.append(controls);
+  wrap.append(input, btn);
 
-  if (disclaimerCell) {
-    const disc = document.createElement('div');
-    disc.className = 'newsletter-disclaimer';
-    disc.innerHTML = window.DOMPurify.sanitize(disclaimerCell.innerHTML, DOMPURIFY);
-    inner.append(disc);
-  }
+  const disclaimer = document.createElement('div');
+  disclaimer.className = 'newsletter-disclaimer';
 
-  form.append(inner);
-  block.textContent = '';
-  block.append(form);
+  inner.append(heading, form);
+  form.append(wrap, disclaimer);
+  block.append(inner);
+
+  await ensureDOMPurify();
+  heading.innerHTML = window.DOMPurify.sanitize(headingHtml, DOMPURIFY);
+  disclaimer.innerHTML = window.DOMPurify.sanitize(disclaimerHtml, DOMPURIFY);
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+  });
 }

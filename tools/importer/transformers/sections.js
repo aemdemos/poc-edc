@@ -1,17 +1,8 @@
 /**
- * Section configuration and optional post-parse DOM markers.
- * Final HTML assembly is performed in import.js; this module documents
- * section intent and can pre-mark nodes when needed.
+ * Section configuration for the ECBVerdyol case study import.
+ * Assembly is performed in import.mjs; this module documents boundaries + utilities.
  */
 
-/**
- * @typedef {Object} SectionDef
- * @property {string} name
- * @property {(doc: Document) => Element | null} detect
- * @property {Record<string, string>} [metadata]
- */
-
-/** @type {SectionDef[]} */
 export const SECTIONS = [
   {
     name: 'hero',
@@ -25,7 +16,7 @@ export const SECTIONS = [
   },
   {
     name: 'article-body',
-    detect: (doc) => doc.querySelector('.article-body, .articlebodycontainer .article-body'),
+    detect: (doc) => doc.querySelector('.articlebodycontainer .article-body, .article-body'),
     metadata: { style: 'article' },
   },
   {
@@ -35,21 +26,21 @@ export const SECTIONS = [
   },
   {
     name: 'cta',
-    detect: (doc) => doc.querySelector('.cmp-text h2'),
+    detect: (doc) => doc.querySelector('.article-body .cmp-text'),
     metadata: {},
   },
   {
     name: 'newsletter',
-    detect: (doc) => doc.querySelector('section.c-subscription-centre, .c-subscription-centre'),
+    detect: (doc) => doc.querySelector('section.c-subscription-centre, form.subscription-form'),
     metadata: { style: 'highlight', 'background-color': '#E5EDF7' },
   },
 ];
 
 /**
- * No-op transform; section assembly is done in import.js.
+ * Optional DOM pass (reserved for future stripping). Currently a no-op.
  * @param {Document} document
  * @returns {Document}
  */
-export function transform(document) {
+export default function transform(document) {
   return document;
 }

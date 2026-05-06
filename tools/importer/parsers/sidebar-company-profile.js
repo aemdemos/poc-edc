@@ -1,38 +1,36 @@
 import { resolveUrl } from '../utils/dom-utils.js';
 
-const SOURCE_BASE = 'https://www.edc.ca';
-
 /**
  * @param {Document} document
  * @returns {{ blockName: string, cells: string[][] }}
  */
 export function parse(document) {
-  const root = document.querySelector('.articlerightcontainer .c-company-at-a-glance, .c-company-at-a-glance');
-  if (!root) {
-    return { blockName: 'Sidebar', cells: [['', '']] };
-  }
+  const aside = document.querySelector('.articlerightcontainer aside, .articlerightcontainer');
+  const section = aside?.querySelector('section.c-company-at-a-glance') || aside;
 
-  const pdfTitle = root.querySelector('.c-pdf-download .download-title')?.textContent?.trim() || 'Download case study';
-  const pdfLink = root.querySelector('.c-pdf-download a.download-link');
-  const pdfHref = pdfLink ? resolveUrl(SOURCE_BASE, pdfLink.getAttribute('href') || '') : '';
-  const pdfText = pdfLink?.textContent?.trim() || '';
-  const pdfCell = pdfHref
-    ? `<a href="${pdfHref}" target="_blank" rel="noopener noreferrer">${pdfText}</a>`
-    : pdfText;
+  const downloadTitleEl = section?.querySelector('.download-title');
+  const downloadLink = section?.querySelector('a.download-link');
 
-  const rows = [
-    [pdfTitle, pdfCell],
-  ];
+  const downloadHeading = downloadTitleEl?.textContent?.trim() || 'Download case study';
+  const pdfHref = downloadLink ? resolveUrl('https://www.edc.ca/', downloadLink.getAttribute('href')) : '';
+  const pdfLabel = downloadLink?.textContent?.trim() || '';
 
-  const companyName = root.querySelector('.company-name')?.textContent?.trim();
+  const rows = [];
+
+  rows.push([
+    downloadHeading,
+    `<a href="${pdfHref}">${pdfLabel}</a>`,
+  ]);
+
+  const companyName = section?.querySelector('.company-name')?.textContent?.trim() || '';
   if (companyName) {
     rows.push(['Company name', companyName]);
   }
 
-  root.querySelectorAll('.item').forEach((item) => {
-    const label = item.querySelector('.label')?.textContent?.trim();
-    const text = item.querySelector('.text')?.textContent?.trim();
-    if (label && text) rows.push([label, text]);
+  section?.querySelectorAll('.item').forEach((item) => {
+    const label = item.querySelector('h4.label')?.textContent?.trim();
+    const value = item.querySelector('p.text')?.textContent?.trim();
+    if (label && value) rows.push([label, value]);
   });
 
   return {
@@ -40,3 +38,5 @@ export function parse(document) {
     cells: rows,
   };
 }
+
+export default { parse };

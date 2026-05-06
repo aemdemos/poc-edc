@@ -1,36 +1,33 @@
-import { escapeHtml } from '../utils/dom-utils.js';
-
 /**
  * @param {Document} document
  * @returns {{ blockName: string, cells: string[][] }}
  */
 export function parse(document) {
   const bq = document.querySelector('blockquote.blockquote, blockquote.blockquote-en');
-  if (!bq) {
-    return {
-      blockName: 'Quote',
-      cells: [['', '']],
-    };
+
+  const titleEl = bq?.querySelector('h3.title, h3');
+  const citeEl = titleEl?.querySelector('cite');
+  let quoteText = '';
+  if (citeEl) {
+    quoteText = citeEl.textContent?.trim() || '';
+  } else if (titleEl) {
+    quoteText = titleEl.textContent?.trim() || '';
   }
 
-  const citeEl = bq.querySelector('cite') || bq.querySelector('h3');
-  let quotation = citeEl?.textContent?.trim() || '';
-  if (!quotation) {
-    quotation = bq.textContent?.trim() || '';
-  }
+  const author = bq?.querySelector('footer .author')?.textContent?.trim() || '';
+  const details = [...bq?.querySelectorAll('footer .detail') || []].map((d) => d.textContent.trim());
+  const role = details[0] || '';
+  const company = details[1] || '';
 
-  const author = bq.querySelector('footer .author')?.textContent?.trim() || '';
-  const details = [...bq.querySelectorAll('footer .detail')].map((d) => d.textContent?.trim()).filter(Boolean);
-  const tail = details.join(', ');
-  const attributionInner = author && tail
-    ? `<em>${escapeHtml(author)}</em>, ${escapeHtml(tail)}`
-    : escapeHtml(`${author}${tail ? `, ${tail}` : ''}`);
+  const attribution = [author, role, company].filter(Boolean).join(', ');
 
   return {
     blockName: 'Quote',
     cells: [
-      [`<p>${escapeHtml(quotation)}</p>`],
-      [`<p>${attributionInner}</p>`],
+      [`<p>${quoteText}</p>`],
+      [`<p><em>${attribution}</em></p>`],
     ],
   };
 }
+
+export default { parse };

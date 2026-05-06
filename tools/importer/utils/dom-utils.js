@@ -1,52 +1,50 @@
 /**
- * DOM helpers for the EDC case study importer (Node + jsdom).
+ * Shared DOM helpers for the EDC content importer (Node.js / jsdom).
  */
 
 /**
- * @param {string} base
- * @param {string} ref
+ * @param {string} baseUrl
+ * @param {string} href
  * @returns {string}
  */
-export function resolveUrl(base, ref) {
+export function resolveUrl(baseUrl, href) {
+  if (!href) return '';
   try {
-    return new URL(ref, base).href;
+    return new URL(href, baseUrl).href;
   } catch {
-    return ref;
+    return href;
   }
 }
 
 /**
- * Serializes a node's outer HTML.
- * @param {import('jsdom').DOMParser | Document} doc
- * @param {Node|null} node
- * @returns {string}
- */
-export function outerHtml(doc, node) {
-  if (!node) return '';
-  const container = doc.createElement('div');
-  container.appendChild(node.cloneNode(true));
-  return container.innerHTML;
-}
-
-/**
- * First matching element or null.
- * @param {Document|Element} root
+ * @param {Document} doc
  * @param {string} selector
  * @returns {Element|null}
  */
-export function queryFirst(root, selector) {
-  return root.querySelector(selector);
+export function selectFirst(doc, selector) {
+  try {
+    return doc.querySelector(selector);
+  } catch {
+    return null;
+  }
 }
 
 /**
- * Escapes text for safe HTML text nodes (fallback).
- * @param {string} str
- * @returns {string}
+ * Strip analytics/data attributes for cleaner authored HTML.
+ * @param {Element} el
  */
-export function escapeHtml(str) {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+export function stripInstrumentation(el) {
+  if (!el) return;
+  [...el.attributes].forEach((attr) => {
+    if (
+      attr.name.startsWith('data-aue')
+      || attr.name.startsWith('data-richtext')
+      || attr.name.startsWith('data-event')
+      || attr.name === 'data-uuid'
+      || attr.name === 'data-tap-close'
+      || attr.name === 'i18n-title'
+    ) {
+      el.removeAttribute(attr.name);
+    }
+  });
 }
