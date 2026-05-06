@@ -381,8 +381,34 @@ function consumeMetadataTable(main) {
   if (section && section.parentElement === main) section.remove();
 }
 
+function convertBlockTables(main) {
+  main.querySelectorAll('table').forEach((table) => {
+    const th = table.querySelector('tr:first-child th');
+    if (!th) return;
+    const headerText = th.textContent.trim().toLowerCase();
+    if (headerText === 'metadata') return;
+    const classes = headerText === 'section metadata'
+      ? ['section-metadata']
+      : headerText.split(/[,(]/).map((s) => toClassName(s.trim().replace(')', '')));
+    const block = document.createElement('div');
+    block.className = classes.filter(Boolean).join(' ');
+    const rows = [...table.querySelectorAll('tr')].slice(1);
+    rows.forEach((row) => {
+      const rowDiv = document.createElement('div');
+      [...row.children].forEach((cell) => {
+        const cellDiv = document.createElement('div');
+        while (cell.firstChild) cellDiv.append(cell.firstChild);
+        rowDiv.append(cellDiv);
+      });
+      block.append(rowDiv);
+    });
+    table.replaceWith(block);
+  });
+}
+
 export function decorateMain(main) {
   consumeMetadataTable(main);
+  convertBlockTables(main);
   // hopefully forward compatible button decoration
   decorateIcons(main);
   buildAutoBlocks(main);
