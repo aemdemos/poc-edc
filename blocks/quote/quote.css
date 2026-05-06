@@ -14,6 +14,8 @@
 
 .quote blockquote .quote-quotation {
   font-size: var(--quote-quotation-font-size);
+  color: var(--quote-color);
+  font-weight: 600;
 }
 
 .quote blockquote .quote-quotation > :first-child {

@@ -27,3 +27,30 @@
   aspect-ratio: var(--cards-image-aspect-ratio);
   object-fit: var(--cards-image-object-fit);
 }
+
+/* Single horizontal service card (case study) */
+main .cards.horizontal[data-layout="horizontal"] > ul {
+  grid-template-columns: 1fr;
+}
+
+@media (width >= 900px) {
+  main .cards.horizontal[data-layout="horizontal"] > ul > li {
+    display: grid;
+    grid-template-columns: minmax(200px, 350px) 1fr;
+    align-items: stretch;
+    gap: 0;
+    border-radius: var(--button-border-radius, 8px);
+    overflow: hidden;
+  }
+
+  main .cards.horizontal[data-layout="horizontal"] .cards-card-image img {
+    aspect-ratio: auto;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  main .cards.horizontal[data-layout="horizontal"] .cards-card-body {
+    margin: 1rem 1.25rem;
+    align-self: center;
+  }
+}

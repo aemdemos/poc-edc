@@ -9,6 +9,10 @@ export default function decorate(block) {
   block.setAttribute('role', 'region');
   block.setAttribute('aria-roledescription', 'Cards');
 
+  if (block.classList.contains('horizontal')) {
+    block.dataset.layout = 'horizontal';
+  }
+
   /* change to ul, li */
   const ul = document.createElement('ul');
   [...block.children].forEach((row) => {

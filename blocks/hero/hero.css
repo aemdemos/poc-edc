@@ -7,23 +7,48 @@
 
 .hero {
   position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   padding: var(--hero-padding);
   min-height: var(--hero-min-height);
 }
 
-.hero h1 {
+.hero .hero-content {
+  position: relative;
+  z-index: 1;
   max-width: var(--hero-heading-max-width);
   margin-left: auto;
   margin-right: auto;
+  width: 100%;
+}
+
+.hero h1 {
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+  font-size: var(--heading-font-size-xxl);
+  font-weight: 700;
+  color: var(--background-color);
+}
+
+.hero .hero-subtitle {
+  margin: 0;
+  max-width: 42rem;
+  font-size: var(--body-font-size-m);
+  font-weight: 400;
+  line-height: 1.5;
   color: var(--background-color);
 }
 
 .hero picture {
   position: absolute;
-  z-index: -1;
+  z-index: 0;
   inset: 0;
-  object-fit: cover;
   box-sizing: border-box;
+}
+
+.hero picture img {
+  display: block;
 }
 
 .hero img {

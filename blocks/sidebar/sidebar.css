@@ -1,0 +1,50 @@
+main .sidebar .sidebar-inner {
+  border: 1px solid rgb(218 218 218);
+  border-radius: var(--button-border-radius, 8px);
+  padding: 1.25rem 1rem;
+  background-color: var(--background-color);
+}
+
+main .sidebar .sidebar-download {
+  margin-bottom: 1.25rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid rgb(218 218 218);
+}
+
+main .sidebar .sidebar-download-title {
+  margin: 0 0 0.5rem;
+  font-size: var(--body-font-size-s);
+  font-weight: 700;
+}
+
+main .sidebar .sidebar-download-body {
+  font-size: var(--body-font-size-s);
+}
+
+main .sidebar .sidebar-download-body a {
+  font-weight: 600;
+}
+
+main .sidebar .sidebar-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.25rem;
+  margin-bottom: 0.75rem;
+}
+
+main .sidebar .sidebar-label {
+  font-size: var(--body-font-size-xs);
+  font-weight: 700;
+}
+
+main .sidebar .sidebar-value {
+  font-size: var(--body-font-size-xs);
+  line-height: 1.45;
+}
+
+@media (width >= 900px) {
+  main .case-study-rail .sidebar {
+    position: sticky;
+    top: 1rem;
+  }
+}
