@@ -13,3 +13,6 @@ localhost-key.pem
 .cursor
 Trace*.json
 .migration/*
+
+# Raster assets from imports / CDN — not committed (icons stay under icons/)
+images/
