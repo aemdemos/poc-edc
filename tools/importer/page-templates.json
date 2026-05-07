@@ -1,0 +1,70 @@
+{
+  "news-release": {
+    "name": "News Release Detail Page",
+    "description": "EDC news release / press release detail pages with article header, body text, about section, media contact, and recommended content",
+    "sourceTemplate": "news-release-detail-page",
+    "outputPath": "/en/about-us/news",
+    "blocks": [
+      {
+        "type": "news-header",
+        "parser": "news-header",
+        "selector": ".headersection .c-news-room-header",
+        "description": "Article header with H1 title, publication date, and location"
+      },
+      {
+        "type": "author",
+        "parser": "author",
+        "selector": ".articleauthors .authors",
+        "description": "Author sidebar with photo, name, position, company, phone, and email"
+      },
+      {
+        "type": "article-body",
+        "parser": "article-body",
+        "selector": ".articlebodycontainer .article-body .responsivegrid .cmp-text",
+        "description": "Main article rich text body with paragraphs, headings, bold, and links"
+      },
+      {
+        "type": "about-section",
+        "parser": "about-section",
+        "selector": ".centraltext .c-title-and-text",
+        "description": "About EDC boilerplate section with heading and body paragraphs"
+      },
+      {
+        "type": "media-contact",
+        "parser": "media-contact",
+        "selector": ".spokesperson .c-spokesperson",
+        "description": "Media contact card with name, organization, phone, and email"
+      },
+      {
+        "type": "recommended-articles",
+        "parser": "recommended-articles",
+        "selector": ".recommended-articles-premium-wrapper",
+        "description": "Recommended content card with image, title, description, and CTA link"
+      }
+    ],
+    "sectionBreak": {
+      "selector": ".c-keyline .key-line, div.key-line",
+      "description": "Key-line dividers that create section breaks between content sections"
+    },
+    "metadata": {
+      "selectors": {
+        "title": "meta[property='og:title']",
+        "description": "meta[name='description']",
+        "template": "meta[name='template']",
+        "keywords": "meta[name='keywords']",
+        "date": ".c-news-room-header .meta-info time",
+        "location": ".c-news-room-header .meta-info .location",
+        "dateModified": ".c-date-modified__date"
+      }
+    },
+    "exclude": [
+      ".header",
+      ".footer",
+      ".breadcrumb-wrapper",
+      "#onetrust-consent-sdk",
+      "script",
+      "noscript",
+      "iframe"
+    ]
+  }
+}
