@@ -1,5 +1,7 @@
 {
-    "libraryUrl": "https://main--ise-boilerplate--aemdemos.aem.page/docs/library/blocks.json",
-    "type": "da",
-    "contentHostUrl": "content.da.live"
-  }
+  "libraryUrl": "https://main--ise-boilerplate--aemdemos.aem.page/docs/library/blocks.json",
+  "type": "da",
+  "contentHostUrl": "https://content.da.live/aemdemos/poc-edc/",
+  "previewOrg": "aemdemos",
+  "previewSite": "poc-edc"
+}
