@@ -24,6 +24,7 @@ const __dirname = path.dirname(__filename);
 const PROJECT_ROOT = path.resolve(__dirname, '../..');
 const CONTENT_DIR = path.join(PROJECT_ROOT, 'content');
 const SOURCE_DOMAIN = 'https://www.edc.ca';
+const DA_BASE = 'https://content.da.live/aemdemos/poc-edc';
 
 // ============ WebImporter Shim ============
 
@@ -192,21 +193,30 @@ async function processImages(sections, pageName, outputDir) {
   fs.mkdirSync(imageDir, { recursive: true });
 
   let downloadCount = 0;
+  const processed = new Map();
+
   for (const section of sections) {
-    const imgs = section.querySelectorAll('img[src]');
-    for (const img of imgs) {
-      let src = img.getAttribute('src');
-      if (!src || src.startsWith('./') || src.startsWith('data:')) continue;
-      // Make absolute
+    const els = section.querySelectorAll('img[src], source[srcset]');
+    for (const el of els) {
+      const attr = el.hasAttribute('src') ? 'src' : 'srcset';
+      let src = el.getAttribute(attr);
+      if (!src || src.startsWith('data:')) continue;
+      // Make absolute for download
       if (src.startsWith('/')) src = `${SOURCE_DOMAIN}${src}`;
       if (!src.startsWith('http')) continue;
-      try {
-        const filename = await downloadImage(src, imageDir);
-        img.setAttribute('src', `./.${pageName}/${filename}`);
-        downloadCount += 1;
-      } catch (err) {
-        console.error(`    Warning: Failed to download ${src}: ${err.message}`);
+
+      // Download once per unique URL, rewrite to relative path
+      if (!processed.has(src)) {
+        try {
+          const filename = await downloadImage(src, imageDir);
+          processed.set(src, `./.${pageName}/${filename}`);
+          downloadCount += 1;
+        } catch (err) {
+          processed.set(src, src);
+          console.error(`    Warning: Failed to download ${src}: ${err.message}`);
+        }
       }
+      el.setAttribute(attr, processed.get(src));
     }
   }
   return downloadCount;
@@ -249,7 +259,7 @@ async function importPage(url) {
   const pageName = path.basename(outputPath, '.plain.html');
   fs.mkdirSync(outputDir, { recursive: true });
 
-  // Download images
+  // Download images and keep source URLs (publicly accessible)
   const imgCount = await processImages(sections, pageName, outputDir);
   console.log(`  Images: ${imgCount} downloaded`);
 

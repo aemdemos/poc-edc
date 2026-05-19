@@ -35,14 +35,15 @@ const PAGE_TEMPLATE = {
 
 // ============ UTILITIES ============
 
+function makeAbsolute(src) {
+  if (!src) return src;
+  if (src.startsWith('http')) return src;
+  if (src.startsWith('/')) return `${window.location.origin}${src}`;
+  return src;
+}
+
 function getDesktopImgSrc(element) {
   if (!element) return null;
-  const makeAbsolute = (src) => {
-    if (!src) return src;
-    if (src.startsWith('http')) return src;
-    if (src.startsWith('/')) return `${window.location.origin}${src}`;
-    return src;
-  };
   const picture = element.tagName === 'PICTURE' ? element : (element.closest ? element.closest('picture') : null);
   if (picture) {
     const sources = picture.querySelectorAll('source');
@@ -54,6 +55,24 @@ function getDesktopImgSrc(element) {
     if (sources.length > 0) {
       return makeAbsolute(sources[0].getAttribute('srcset') || sources[0].getAttribute('srcSet'));
     }
+  }
+  const img = element.tagName === 'IMG' ? element : element.querySelector('img');
+  return img ? makeAbsolute(img.getAttribute('src') || img.src) : null;
+}
+
+function getMobileImgSrc(element) {
+  if (!element) return null;
+  const picture = element.tagName === 'PICTURE' ? element : (element.closest ? element.closest('picture') : null);
+  if (picture) {
+    const sources = picture.querySelectorAll('source');
+    for (const source of sources) {
+      if ((source.getAttribute('media') || '').includes('576')) {
+        return makeAbsolute(source.getAttribute('srcset') || source.getAttribute('srcSet'));
+      }
+    }
+    // Fallback to img src (typically mobile)
+    const img = picture.querySelector('img');
+    if (img) return makeAbsolute(img.getAttribute('src') || img.src);
   }
   const img = element.tagName === 'IMG' ? element : element.querySelector('img');
   return img ? makeAbsolute(img.getAttribute('src') || img.src) : null;
@@ -82,7 +101,7 @@ export default {
 
     // 2. Build output into a clean main element
     const main = document.createElement('div');
-    const parserContext = { document, main, url, params, getDesktopImgSrc };
+    const parserContext = { document, main, url, params, getDesktopImgSrc, getMobileImgSrc };
 
     // 3. Hero block
     const heroEl = body.querySelector(PAGE_TEMPLATE.blocks[0].selector);

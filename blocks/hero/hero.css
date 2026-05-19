@@ -26,6 +26,10 @@
   box-sizing: border-box;
 }
 
+.hero picture.hero-desktop {
+  display: none;
+}
+
 .hero img {
   object-fit: cover;
   width: 100%;
@@ -35,5 +39,13 @@
 @media (width >= 900px) {
   .hero {
     padding: var(--hero-padding-desktop);
+  }
+
+  .hero picture.hero-mobile {
+    display: none;
+  }
+
+  .hero picture.hero-desktop {
+    display: block;
   }
 }
