@@ -1,0 +1,35 @@
+{
+  "templates": [
+    {
+      "name": "article-detail",
+      "description": "Article detail pages featuring company export stories and insights",
+      "representativePages": [
+        "https://www.edc.ca/en/article/exporting-craft-beer-to-asia.html",
+        "https://www.edc.ca/en/article/export-success-for-asham-curling.html",
+        "https://www.edc.ca/en/article/soti-adapts-to-export-markets-worldwide.html"
+      ],
+      "blocks": [
+        {
+          "name": "hero",
+          "selector": ".articlehero",
+          "description": "Hero banner with full-width image and article title"
+        },
+        {
+          "name": "article-body",
+          "selector": ".articlebodycontainer .cmp-text",
+          "description": "Main article body content with date, paragraphs, headings"
+        },
+        {
+          "name": "recommended-articles",
+          "selector": ".c-recommended-articles",
+          "description": "Dynamic placeholder for recommended article cards"
+        },
+        {
+          "name": "metadata",
+          "selector": "head meta, title, time.c-tidvi, [data-primary-tag]",
+          "description": "Page metadata block (title, description, template, date, category)"
+        }
+      ]
+    }
+  ]
+}
